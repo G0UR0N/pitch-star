@@ -685,7 +685,7 @@ $('#btnMicTest').onclick = async () => {
   loop();
 };
 
-// ---------- latency calibration: beeps, she claps on each; median lag = delay ----------
+// ---------- latency calibration: beeps, singer says "tick" on each; median lag = delay ----------
 $('#btnCalib').onclick = async () => {
   const out = $('#calibOut'), btn = $('#btnCalib');
   try { await ensureAudio(); } catch { out.textContent = 'mic blocked'; return; }
@@ -714,7 +714,7 @@ $('#btnCalib').onclick = async () => {
         const th = Math.max(0.02, (floor / Math.max(1, nf)) * 5);
         if (r > th && prev <= th && now - last > 0.3) { onsets.push(now); last = now; }
         const k = Math.floor((now - t0) / gap) + 1;
-        out.textContent = k >= 1 && k <= N ? `Clap! ${k}/${N}` : '';
+        out.textContent = k >= 1 && k <= N ? `Say "tick"! ${k}/${N}` : '';
       }
       prev = r;
       if (now < end) requestAnimationFrame(loop); else done();
@@ -723,7 +723,7 @@ $('#btnCalib').onclick = async () => {
   });
   btn.disabled = false;
   const lags = beeps.slice(2).map(b => onsets.find(o => o > b + 0.02 && o < b + 0.6)).map((o, i) => o && o - beeps[i + 2]).filter(Boolean);
-  if (lags.length < 4) { out.textContent = `Heard ${lags.length} claps. Try again, a bit louder.`; return; }
+  if (lags.length < 4) { out.textContent = `Heard ${lags.length} ticks. Try again, a bit louder.`; return; }
   lags.sort((a, b) => a - b);
   const ms = Math.round((lags[lags.length >> 1] * 1000) / 10) * 10;
   setLatency(Math.min(600, Math.max(0, ms)));

@@ -1,0 +1,10 @@
+# song packs stay private (copyrighted audio)
+songs/
+*.song
+__pycache__/
+.claude/
+AI_Template/
+# private rule files (personal info)
+CLAUDE.md
+ChatRules.md
+Agents.md

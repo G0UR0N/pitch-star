@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1b1035">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>Pitch Star</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<section id="library" class="screen">
+  <header class="top">
+    <h1>🎤 Pitch Star</h1>
+    <button id="btnSettings" class="icon" aria-label="Settings">⚙️</button>
+  </header>
+  <div id="songList" class="list"></div>
+  <label class="btn primary wide">
+    + Add songs
+    <input id="importInput" type="file" accept=".song,application/zip,application/octet-stream" multiple hidden>
+  </label>
+  <p class="hint">Add <b>.song</b> files made by the prep tool. Use headphones for best scoring.</p>
+</section>
+
+<section id="play" class="screen" hidden>
+  <header class="hud">
+    <button id="btnQuit" class="icon" aria-label="Back">✕</button>
+    <div class="hudTitle"><span id="playTitle"></span><small id="playSub"></small></div>
+    <div class="hudScore" id="liveScore">0</div>
+  </header>
+  <div class="stage">
+    <canvas id="cv"></canvas>
+    <div id="overlay" class="overlay" hidden></div>
+  </div>
+  <div id="practicePanel" class="practice" hidden>
+    <button id="btnPrevSec" class="btn small">◀</button>
+    <div class="pinfo"><b id="pSec"></b><span id="pAttempts"></span></div>
+    <button id="btnNextSec" class="btn small">▶</button>
+  </div>
+  <footer class="controls">
+    <button id="btnPlay" class="btn primary">▶ Start</button>
+    <label class="ctl">Guide voice <input id="guideVol" type="range" min="0" max="1" step="0.05" value="0.3"></label>
+    <label class="ctl tog"><input id="melodyTog" type="checkbox"> Hear notes</label>
+    <label class="ctl">Speed
+      <select id="speedSel"><option value="1">100%</option><option value="0.85">85%</option><option value="0.7">70%</option></select>
+    </label>
+  </footer>
+</section>
+
+<section id="results" class="screen" hidden>
+  <header class="top"><h1 id="resTitle"></h1></header>
+  <div class="bigScore"><div id="resStars"></div><div id="resScore"></div><div id="resBest"></div></div>
+  <div class="row">
+    <button id="btnPracticeWeak" class="btn primary">🎯 Practice weak sections</button>
+    <button id="btnAgain" class="btn">↻ Sing again</button>
+    <button id="btnLib" class="btn">Songs</button>
+  </div>
+  <h2>Sections</h2>
+  <div id="secList" class="list"></div>
+</section>
+
+<dialog id="settingsDlg">
+  <form method="dialog">
+    <h2>Settings</h2>
+    <label>Difficulty
+      <select id="setDifficulty">
+        <option value="easy">Easy (within 1 note)</option>
+        <option value="normal">Normal</option>
+        <option value="hard">Hard</option>
+      </select>
+    </label>
+    <label>Pass target for practice: <b id="passOut"></b>%
+      <input id="setPass" type="range" min="50" max="95" step="5">
+    </label>
+    <label>Mic delay fix: <b id="latOut"></b> ms
+      <input id="setLatency" type="range" min="0" max="400" step="10">
+    </label>
+    <p class="hint">Raise the delay fix if notes score late even when you sing on time (Bluetooth headphones need ~200+).</p>
+    <div class="mictest">Mic test: <b id="micNote">—</b> <button type="button" id="btnMicTest" class="btn small">Start mic</button></div>
+    <button class="btn primary wide">Done</button>
+  </form>
+</dialog>
+
+<div id="toast" class="toast" hidden></div>
+<script type="module" src="app.js"></script>
+</body>
+</html>

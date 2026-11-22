@@ -1,0 +1,28 @@
+[project]
+name = "pitch-prep"
+version = "0.1.0"
+requires-python = "==3.11.*"
+dependencies = [
+    "torch==2.5.1",
+    "torchaudio==2.5.1",
+    "demucs==4.0.1",
+    "torchcrepe==0.0.23",
+    "yt-dlp[default]",
+    "soundfile",
+    "numpy<2",
+    "scipy",
+    "deno>=2.9.8",
+    "piano-transcription-inference>=0.0.6",
+]
+
+[tool.uv]
+package = false
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu124" }
+torchaudio = { index = "pytorch-cu124" }
+
+[[tool.uv.index]]
+name = "pytorch-cu124"
+url = "https://download.pytorch.org/whl/cu124"
+explicit = true

@@ -51,6 +51,8 @@
     <button id="btnPlay" class="btn primary">▶ Start</button>
     <label class="ctl">Guide voice <input id="guideVol" type="range" min="0" max="1" step="0.05" value="0.3"></label>
     <label class="ctl tog"><input id="melodyTog" type="checkbox"> Hear notes</label>
+    <label class="ctl">Mic <select id="playMic" class="micSel"></select></label>
+    <label class="ctl">Delay <b id="playLat"></b>ms</label>
     <label class="ctl">Speed
       <select id="speedSel"><option value="1">100%</option><option value="0.85">85%</option><option value="0.7">70%</option></select>
     </label>
@@ -82,7 +84,10 @@
     <label>Pass target for practice: <b id="passOut"></b>%
       <input id="setPass" type="range" min="50" max="95" step="5">
     </label>
-    <label>Mic delay fix: <b id="latOut"></b> ms
+    <label>Microphone
+      <select id="setMic" class="micSel"></select>
+    </label>
+    <label>Mic delay fix: <b id="latOut"></b> ms <small class="hint">(saved per microphone)</small>
       <input id="setLatency" type="range" min="0" max="600" step="10">
     </label>
     <div class="mictest"><button type="button" id="btnCalib" class="btn small">🎧 Auto-set delay</button><span id="calibOut" class="hint"></span></div>

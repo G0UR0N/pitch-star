@@ -80,15 +80,64 @@ async function ensureAudio() {
     melGain = ctx.createGain(); melGain.gain.value = 0;
     osc.connect(melGain).connect(ctx.destination); osc.start();
   }
-  if (!analyser && !SIM) {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
-    });
-    analyser = ctx.createAnalyser(); analyser.fftSize = 2048;
-    ctx.createMediaStreamSource(stream).connect(analyser);
-    micBuf = new Float32Array(analyser.fftSize);
-  }
+  if (!micStream && !SIM) await openMic();
 }
+
+// ---------- microphone choice (delay is remembered per microphone) ----------
+let micStream = null, micSrc = null;
+async function openMic() {
+  micStream?.getTracks().forEach(t => t.stop());
+  micSrc?.disconnect();
+  const base = { echoCancellation: false, noiseSuppression: false, autoGainControl: false };
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: settings.micId ? { ...base, deviceId: { exact: settings.micId } } : base });
+  } catch (e) {
+    if (!settings.micId) throw e;
+    toast('Saved microphone not found, using the default one');
+    settings.micId = ''; saveSettings();
+    stream = await navigator.mediaDevices.getUserMedia({ audio: base });
+  }
+  micStream = stream;
+  if (!analyser) { analyser = ctx.createAnalyser(); analyser.fftSize = 2048; micBuf = new Float32Array(analyser.fftSize); }
+  micSrc = ctx.createMediaStreamSource(stream); micSrc.connect(analyser);
+  fillMicLists();
+}
+async function fillMicLists() {
+  let devs = [];
+  try { devs = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'audioinput'); } catch {}
+  const named = devs.some(d => d.label);
+  for (const sel of document.querySelectorAll('.micSel')) {
+    sel.innerHTML = '';
+    sel.add(new Option(named ? 'Default microphone' : 'Default (tap Start mic to list all)', ''));
+    devs.filter(d => d.deviceId && d.deviceId !== 'default' && d.deviceId !== 'communications')
+      .forEach((d, i) => sel.add(new Option(d.label || `Microphone ${i + 1}`, d.deviceId)));
+    sel.value = settings.micId || '';
+    if (sel.value !== (settings.micId || '')) sel.value = '';
+  }
+  showLatency();
+}
+function showLatency() {
+  $('#playLat').textContent = settings.latency;
+  $('#latOut').textContent = settings.latency; $('#setLatency').value = settings.latency;
+}
+function setLatency(ms) {
+  settings.latency = ms;
+  (settings.latByMic ??= {})[settings.micId || ''] = ms;
+  saveSettings(); showLatency();
+}
+for (const sel of document.querySelectorAll('.micSel')) {
+  sel.onchange = async e => {
+    settings.micId = e.target.value;
+    const saved = settings.latByMic?.[settings.micId];
+    if (saved != null) settings.latency = saved;
+    saveSettings(); showLatency();
+    if (ctx && !SIM) { try { await openMic(); toast('Microphone changed' + (saved == null ? ' – run Auto-set delay for it' : '')); } catch { toast('Could not open that microphone'); } }
+    fillMicLists();
+  };
+}
+navigator.mediaDevices?.addEventListener?.('devicechange', fillMicLists);
+fillMicLists();
 function readMic() {
   if (!analyser) return null;
   analyser.getFloatTimeDomainData(micBuf);
@@ -619,12 +668,12 @@ let micTestOn = false;
 $('#btnSettings').onclick = () => {
   $('#setDifficulty').value = settings.difficulty;
   $('#setPass').value = settings.passTarget; $('#passOut').textContent = settings.passTarget;
-  $('#setLatency').value = settings.latency; $('#latOut').textContent = settings.latency;
+  showLatency(); fillMicLists();
   dlg.showModal();
 };
 $('#setDifficulty').onchange = e => { settings.difficulty = e.target.value; saveSettings(); };
 $('#setPass').oninput = e => { settings.passTarget = +e.target.value; $('#passOut').textContent = e.target.value; saveSettings(); };
-$('#setLatency').oninput = e => { settings.latency = +e.target.value; $('#latOut').textContent = e.target.value; saveSettings(); };
+$('#setLatency').oninput = e => setLatency(+e.target.value);
 $('#btnMicTest').onclick = async () => {
   try { await ensureAudio(); } catch { $('#micNote').textContent = 'mic blocked'; return; }
   micTestOn = true;
@@ -677,8 +726,7 @@ $('#btnCalib').onclick = async () => {
   if (lags.length < 4) { out.textContent = `Heard ${lags.length} claps. Try again, a bit louder.`; return; }
   lags.sort((a, b) => a - b);
   const ms = Math.round((lags[lags.length >> 1] * 1000) / 10) * 10;
-  settings.latency = Math.min(600, Math.max(0, ms)); saveSettings();
-  $('#setLatency').value = settings.latency; $('#latOut').textContent = settings.latency;
+  setLatency(Math.min(600, Math.max(0, ms)));
   out.textContent = `Delay set to ${settings.latency} ms ✓`;
 };
 

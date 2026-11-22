@@ -1,6 +1,7 @@
-import { readZip } from './zip.js';
+import { readZip, writeZip } from './zip.js';
 import * as db from './db.js';
 import { detectPitch } from './pitch.js';
+import { framesToNotes, placeOctave, toPhrases, noteRange } from './melody.js';
 
 const $ = s => document.querySelector(s);
 const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
@@ -33,9 +34,14 @@ async function renderLibrary() {
   for (const s of songs) {
     const el = document.createElement('div'); el.className = 'card';
     el.innerHTML = `<div class="meta"><b></b><small>${fmtTime(s.meta.duration)} · ${s.meta.phrases.length} sections${best[s.id] != null ? ` · best ${best[s.id]}` : ''}</small></div>
-      <button class="btn primary small" data-a="sing">Sing</button><button class="icon" data-a="del" aria-label="Delete">🗑️</button>`;
-    el.querySelector('b').textContent = s.title;
+      <button class="btn primary small" data-a="sing">Sing</button>
+      <button class="icon" data-a="rec" title="Record melody" aria-label="Record melody">🎙️</button>
+      <button class="icon" data-a="exp" title="Export song file" aria-label="Export">⤓</button>
+      <button class="icon" data-a="del" title="Remove" aria-label="Delete">🗑️</button>`;
+    el.querySelector('b').textContent = s.title + (s.meta.edited ? ' ✎' : '');
     el.querySelector('[data-a=sing]').onclick = () => openSong(s.id);
+    el.querySelector('[data-a=rec]').onclick = () => openSong(s.id, { record: true });
+    el.querySelector('[data-a=exp]').onclick = () => exportSong(s.id);
     el.querySelector('[data-a=del]').onclick = async () => {
       if (confirm(`Remove "${s.title}"?`)) { await db.deleteSong(s.id); renderLibrary(); }
     };
@@ -103,13 +109,17 @@ async function openSong(id, opts = {}) {
   const gB = ctx.createGain(), gV = ctx.createGain();
   const nB = ctx.createMediaElementSource(backing), nV = ctx.createMediaElementSource(vocals);
   nB.connect(gB).connect(ctx.destination); nV.connect(gV).connect(ctx.destination);
-  gV.gain.value = settings.guide;
   const m = song.meta;
+  // an instrumental's guide track is a tone render of the OLD notes; mute it once the melody was re-recorded
+  const guideStale = m.edited && m.kind === 'instrumental';
+  gV.gain.value = guideStale ? 0 : settings.guide;
   S = {
     song, meta: m, notes: m.notes, phrases: m.phrases, backing, vocals, gB, gV, nodes: [nB, nV, gB, gV],
     lo: m.range[0] - 3, hi: m.range[1] + 3, rate: 1, trail: [], pops: [], running: false,
-    mode: 'song', queue: [], qi: 0, attempts: [], passes: 0,
+    mode: 'song', queue: [], qi: 0, attempts: [], passes: 0, guideStale,
   };
+  $('#melodyTog').checked = guideStale || !!opts.hearNotes;
+  $('#recPanel').hidden = true;
   resetStats();
   backing.onended = () => { if (S && S.mode === 'song') finishSong(); };
   $('#playTitle').textContent = song.title;
@@ -117,7 +127,8 @@ async function openSong(id, opts = {}) {
   $('#speedSel').value = '1';
   $('#btnPlay').textContent = '▶ Start';
   $('#liveScore').textContent = '0';
-  if (opts.practice) startPractice(opts.practice);
+  if (opts.record) startRecord();
+  else if (opts.practice) startPractice(opts.practice);
   else { S.mode = 'song'; $('#practicePanel').hidden = true; $('#playSub').textContent = 'Full song'; seek(0); }
   show('play'); resize();
   requestAnimationFrame(tick);
@@ -195,7 +206,7 @@ $('#btnQuit').onclick = () => {
   if (S?.mode === 'practice' && S.fromResults) { const id = S.song.id; closeSession(); showResults(id, lastResult); }
   else { closeSession(); show('library'); renderLibrary(); }
 };
-$('#guideVol').oninput = e => { settings.guide = +e.target.value; saveSettings(); if (S) S.gV.gain.value = settings.guide; };
+$('#guideVol').oninput = e => { settings.guide = +e.target.value; saveSettings(); if (S && !S.guideStale) S.gV.gain.value = settings.guide; };
 $('#speedSel').onchange = e => { if (!S) return; S.rate = +e.target.value; S.backing.playbackRate = S.vocals.playbackRate = S.rate; };
 
 // ---------- main loop ----------
@@ -205,6 +216,7 @@ function tick() {
   const L = (settings.latency / 1000) * S.rate;
   const ts = t - L; // song time of the voice we're hearing now
   let r = null;
+  if (S.mode === 'record') { recordTick(t, ts); draw(ts, ts); requestAnimationFrame(tick); return; }
   if (S.running) {
     r = SIM ? simVoice(ts) : readMic();
     scoreFrame(ts, r?.midi ?? null);
@@ -237,7 +249,7 @@ function noteIndexAt(ts, advance = true) {
 }
 const foldCents = (m, p) => ((((m - p) % 12) + 18) % 12 - 6) * 100;
 
-function inLoop(i) { return S.mode !== 'practice' || (i >= S.loop.a && i < S.loop.b); }
+function inLoop(i) { return S.mode === 'song' || (S.mode === 'practice' && i >= S.loop.a && i < S.loop.b); }
 
 function scoreFrame(ts, midi) {
   const i = noteIndexAt(ts);
@@ -268,10 +280,12 @@ function judge(ts) {
 
 function melody(t) {
   if (!melGain) return;
-  const on = $('#melodyTog').checked && S.running;
-  let i = S.ni;
-  while (i < S.notes.length && S.notes[i].t + S.notes[i].d < t) i++;
-  const n = S.notes[i];
+  const listen = S.mode === 'record' && S.rec?.listening;
+  const list = listen ? S.rec.preview : S.notes;
+  const on = (listen || $('#melodyTog').checked) && S.running && (S.mode !== 'record' || listen);
+  let lo = 0, hi = list.length;
+  while (lo < hi) { const m = (lo + hi) >> 1; if (list[m].t + list[m].d < t) lo = m + 1; else hi = m; }
+  const n = list[lo];
   const active = on && n && n.t <= t;
   if (active) osc.frequency.setTargetAtTime(440 * 2 ** ((n.p - 69) / 12), ctx.currentTime, 0.005);
   melGain.gain.setTargetAtTime(active ? 0.18 : 0, ctx.currentTime, 0.015);
@@ -303,8 +317,8 @@ function draw(t, ts) {
     g.fillRect(0, y(m), W, Math.max(1, dpr));
     if (isC) { g.fillStyle = '#ffffff55'; g.fillText(noteName(m), 4 * dpr, y(m) - 7 * dpr); }
   }
-  // practice loop shading
-  if (S.mode === 'practice') {
+  // practice / record range shading
+  if (S.mode !== 'song') {
     g.fillStyle = '#00000066';
     g.fillRect(0, 0, Math.max(0, x(S.loop.t0)), H);
     g.fillRect(x(S.loop.t1), 0, W, H);
@@ -324,6 +338,14 @@ function draw(t, ts) {
     }
     const bh = Math.max(6 * dpr, rowH * 0.75);
     roundRect(x(n.t), y(n.p) - bh / 2, Math.max(2, n.d * pps - 2 * dpr), bh, bh / 2, col);
+  }
+  // newly recorded melody (preview before Keep)
+  if (S.mode === 'record' && S.rec.preview) {
+    const bh = Math.max(6 * dpr, rowH * 0.75);
+    for (const n of S.rec.preview) {
+      if (n.t > t1 || n.t + n.d < t0) continue;
+      roundRect(x(n.t), y(n.p) - bh / 2, Math.max(2, n.d * pps - 2 * dpr), bh, bh / 2, css('--accent'));
+    }
   }
   // now line
   g.fillStyle = '#ffffff88'; g.fillRect(nowX - dpr, 0, 2 * dpr, H);
@@ -484,9 +506,111 @@ function practiceTick(t) {
 $('#btnPrevSec').onclick = () => S && shiftSection(-1);
 $('#btnNextSec').onclick = () => S && shiftSection(1);
 function shiftSection(dir) {
+  if (S.mode === 'record') {
+    const n = S.phrases.length;
+    S.rec.sel = ((S.rec.sel + 1 + dir + n + 1) % (n + 1)) - 1; // -1 = whole song
+    loadRec(); return;
+  }
   if (S.queue.length > 1) S.qi = (S.qi + dir + S.queue.length) % S.queue.length;
   else S.queue = [Math.min(S.phrases.length - 1, Math.max(0, S.queue[0] + dir))];
   loadLoop();
+}
+
+// ---------- record melody (a parent sings the reference) ----------
+function startRecord() {
+  S.mode = 'record';
+  S.rec = { sel: -1, frames: [], preview: null, listening: false };
+  $('#practicePanel').hidden = false;
+  loadRec();
+}
+function loadRec() {
+  const R = S.rec, p = R.sel >= 0 ? S.phrases[R.sel] : null;
+  const dur = S.meta.duration;
+  // capture window reaches a bit past the section so early/late notes are kept
+  // (never past halfway to a neighbouring section, so its notes stay untouched)
+  const prev = p && R.sel > 0 ? S.phrases[R.sel - 1].t1 : -1;
+  const next = p && R.sel < S.phrases.length - 1 ? S.phrases[R.sel + 1].t0 : 1e9;
+  S.loop = p
+    ? { a: p.a, b: p.b, t0: Math.max(0, p.t0 - 0.4, (prev + p.t0) / 2), t1: Math.min(dur, p.t1 + 0.4, (p.t1 + next) / 2),
+        start: Math.max(0, p.t0 - 3), end: Math.min(dur, p.t1 + 1) }
+    : { a: 0, b: S.notes.length, t0: 0, t1: dur, start: 0, end: dur };
+  R.frames = []; R.preview = null; R.listening = false;
+  $('#recPanel').hidden = true;
+  $('#playSub').textContent = 'Record melody · sing the tune with headphones on';
+  $('#pSec').textContent = p ? `Re-record section ${R.sel + 1} of ${S.phrases.length}` : 'Record whole song';
+  $('#pAttempts').textContent = 'Press Start and sing the melody. ◀ ▶ picks a section.';
+  $('#liveScore').textContent = '🎙️';
+  if (S.running) pause();
+  $('#btnPlay').textContent = '▶ Start';
+  seek(S.loop.start);
+}
+function recordTick(t, ts) {
+  const R = S.rec, L = S.loop;
+  melody(t);
+  if (!S.running) return;
+  if (!R.listening && ts >= L.t0 && ts <= L.t1) {
+    const r = SIM ? simVoice(ts) : readMic();
+    // sim: an adult singing an octave down and a little flat
+    const m = r ? (SIM ? r.midi - 12 - 0.3 : r.midi) : null;
+    R.frames.push({ t: ts, m });
+    S.trail.push({ t: ts, m });
+    while (S.trail.length && S.trail[0].t < ts - 4) S.trail.shift();
+  }
+  if (t >= L.end || S.backing.ended) finishRec();
+}
+function finishRec() {
+  const R = S.rec;
+  pause();
+  if (R.listening) { R.listening = false; $('#recPanel').hidden = false; seek(S.loop.start); return; }
+  const voiced = R.frames.filter(f => f.m != null).length;
+  if (voiced < 20) { toast("Didn't hear singing. Check the mic and try again."); seek(S.loop.start); return; }
+  const old = S.notes.slice(S.loop.a, S.loop.b).map(n => n.p).sort((a, b) => a - b);
+  const target = old.length ? old[old.length >> 1] : 67;
+  R.preview = placeOctave(framesToNotes(R.frames), target);
+  $('#pAttempts').textContent = `Heard ${R.preview.length} notes (pink). Listen, then Keep or Retry.`;
+  $('#recPanel').hidden = false;
+  $('#btnPlay').textContent = '▶ Start';
+  seek(S.loop.start);
+}
+$('#btnRecListen').onclick = () => { if (!S?.rec?.preview) return; S.rec.listening = true; $('#recPanel').hidden = true; seek(S.loop.start); play(); };
+$('#btnRecRetry').onclick = () => { if (S) loadRec(); };
+$('#btnRecDiscard').onclick = () => { if (!S) return; closeSession(); show('library'); renderLibrary(); };
+$('#btnRecKeep').onclick = async () => {
+  if (!S?.rec?.preview) return;
+  const { t0, t1 } = S.loop, id = S.song.id;
+  const kept = S.notes.filter(n => n.t + n.d <= t0 || n.t >= t1);
+  const notes = kept.concat(S.rec.preview).sort((a, b) => a.t - b.t);
+  const song = await db.getSong(id);
+  song.meta = { ...song.meta, notes, phrases: toPhrases(notes), range: noteRange(notes), edited: true };
+  await db.putSong(song);
+  const sel = S.rec.sel;
+  closeSession();
+  toast('Melody saved ✓  (use ⤓ to export it)');
+  // reopen to check it, with the new notes playing as tones
+  openSong(id, sel >= 0 ? { practice: { queue: [Math.min(sel, song.meta.phrases.length - 1)], fromResults: false }, hearNotes: true } : { hearNotes: true });
+};
+
+// ---------- export a song pack (e.g. after re-recording the melody) ----------
+async function exportSong(id) {
+  const s = await db.getSong(id);
+  const u8 = async b => new Uint8Array(await b.arrayBuffer());
+  const blob = writeZip({
+    'song.json': new TextEncoder().encode(JSON.stringify(s.meta)),
+    'backing.mp3': await u8(s.backing),
+    'vocals.mp3': await u8(s.vocals),
+  });
+  const name = `${id}.song`;
+  if (window.showSaveFilePicker) { // desktop Chrome/Edge: save straight into the Drive folder
+    try {
+      const h = await showSaveFilePicker({ suggestedName: name, types: [{ description: 'Pitch Star song', accept: { 'application/zip': ['.song'] } }] });
+      const w = await h.createWritable(); await w.write(blob); await w.close();
+      toast('Exported ✓'); return;
+    } catch (e) { if (e.name === 'AbortError') return; }
+  }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = name; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+  toast('Exported to Downloads ✓');
 }
 
 // ---------- settings ----------

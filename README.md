@@ -25,6 +25,13 @@ Tools live in `%USERPROFILE%\PitchScoreGameTools` (Python env, ffmpeg, uv). Not 
 - **Guide voice** = original singer volume. **Hear notes** = plays the target melody as tones (also a quick way to check the melody extraction is right).
 - After a song: **Practice weak sections** loops each section until it scores the pass target twice.
 
+## Fix a melody by singing it (🎙️)
+Best on the PC in Chrome/Edge (open the game URL), headphones on.
+1. ⚙️ → **Auto-set delay** first (clap on the beeps).
+2. Song list → 🎙️. ◀ ▶ picks **whole song** or one section. **Start**, sing the tune (any octave; vibrato and slides are ignored).
+3. Pink bars = what was heard. **Listen** plays them as tones over the music. **Keep** / **Retry** / **Discard**.
+4. **⤓ Export** saves the fixed `.song`. On PC, pick `G:\My Drive\PitchStar` (replace the old file). On the phone, remove the old copy and **Add songs** again.
+
 ## Dev
 - Local test: run the `game` launch config, open `http://localhost:8765/app/`.
 - `?sim=1` = fake singer (no mic). `?load=../songs/x.song` = auto-import.

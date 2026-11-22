@@ -13,6 +13,12 @@ No singer (piano/instrumental)? Detected automatically: the melody is transcribe
 
 Tools live in `%USERPROFILE%\PitchScoreGameTools` (Python env, ffmpeg, uv). Not synced to OneDrive.
 
+## Phone
+- Game URL: https://g0ur0n.github.io/pitch-star/app/
+- iPhone (Safari): Share → **Add to Home Screen**. Android (Chrome): ⋮ → **Install app**.
+- Songs: `songs\` syncs through OneDrive. On the phone tap **Add songs** → browse OneDrive → pick `.song` files. They're stored in the app and work offline.
+- App updates: after code changes run `publish.ps1` (right-click → Run with PowerShell).
+
 ## Play
 - Open the game, tap **Add songs**, pick `.song` files.
 - Use headphones. Set **Mic delay fix** in ⚙️ if scoring feels late.
@@ -23,3 +29,4 @@ Tools live in `%USERPROFILE%\PitchScoreGameTools` (Python env, ffmpeg, uv). Not 
 - Local test: run the `game` launch config, open `http://localhost:8765/app/`.
 - `?sim=1` = fake singer (no mic). `?load=../songs/x.song` = auto-import.
 - `prep\make_test_song.py` builds a synthetic test song.
+- Lessons (2026-11-22): the Claude desktop sandbox redirects writes under `AppData` (so tools live in `%USERPROFILE%\PitchScoreGameTools`, and `gh` login/publish must run in the user's real terminal). In PowerShell 5.1 scripts, keep `$ErrorActionPreference='Continue'` around native commands, or their stderr aborts the script.

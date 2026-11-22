@@ -736,7 +736,16 @@ async function grabWake() { try { wake ??= await navigator.wakeLock?.request('sc
 function releaseWake() { wake?.release().catch(() => {}); wake = null; }
 
 // ---------- boot ----------
-if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js');
+if ('serviceWorker' in navigator && location.protocol === 'https:') {
+  navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' });
+  // new version installed -> reload once, but never in the middle of a song
+  const hadController = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hadController) return;
+    const reload = () => (S ? setTimeout(reload, 2000) : location.reload());
+    reload();
+  });
+}
 (async () => {
   const load = params.get('load'); // dev: ?load=../songs/x.song
   if (load) {

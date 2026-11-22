@@ -5,7 +5,7 @@ import { detectPitch } from './pitch.js';
 const $ = s => document.querySelector(s);
 const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const noteName = m => { const r = Math.round(m); return NAMES[((r % 12) + 12) % 12] + (Math.floor(r / 12) - 1); };
-const fmtTime = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+const fmtTime = s => (s = Math.max(0, s), `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`);
 const TOL = { easy: 100, normal: 60, hard: 40 };
 const params = new URLSearchParams(location.search);
 const SIM = params.has('sim'); // dev: fake singer that follows the melody
@@ -162,9 +162,26 @@ function songTime() {
   S.lastT = t; return t;
 }
 
+const whenReady = a => new Promise(res => {
+  if (a.readyState >= 4) return res();
+  const done = () => { a.removeEventListener('canplaythrough', done); res(); };
+  a.addEventListener('canplaythrough', done); setTimeout(done, 6000);
+});
 async function play() {
+  if (S.starting) return;
+  S.starting = true;
+  const ov = $('#overlay'), btn = $('#btnPlay');
+  btn.disabled = true;
   await ensureAudio();
+  ov.hidden = false; ov.textContent = 'Loading…';
+  await Promise.all([whenReady(S.backing), whenReady(S.vocals)]);
+  // count-in also gives Bluetooth / mic audio routing time to settle
+  for (const n of [3, 2, 1]) { if (!S) return; ov.textContent = n; await new Promise(r => setTimeout(r, 700)); }
+  if (!S) return;
+  ov.hidden = true; btn.disabled = false; S.starting = false;
+  S.vocals.currentTime = S.backing.currentTime;
   await Promise.all([S.backing.play(), S.vocals.play()]).catch(() => {});
+  S.lastCT = S.backing.currentTime; S.lastPerf = performance.now(); S.lastT = S.lastCT; S.nextSync = performance.now() + 1500;
   S.running = true; $('#btnPlay').textContent = '❚❚ Pause';
   grabWake();
 }
@@ -196,9 +213,12 @@ function tick() {
   }
   judge(ts);
   melody(t);
-  if (S.running && Math.abs(S.vocals.currentTime - S.backing.currentTime) > 0.06) S.vocals.currentTime = S.backing.currentTime;
+  // re-sync guide track only on real drift, at most every 2 s (each seek stutters)
+  if (S.running && performance.now() > S.nextSync && Math.abs(S.vocals.currentTime - S.backing.currentTime) > 0.15) {
+    S.vocals.currentTime = S.backing.currentTime; S.nextSync = performance.now() + 2000;
+  }
   if (S.mode === 'practice') practiceTick(t, ts);
-  draw(t, ts, r);
+  draw(ts, ts, r); // draw at "heard" time so bars line up with what she hears (Bluetooth delay)
   requestAnimationFrame(tick);
 }
 
@@ -436,6 +456,7 @@ function updatePracticeUI() {
 }
 function practiceTick(t) {
   const L = S.loop, ov = $('#overlay');
+  if (S.starting) return;
   if (S.running && t < L.t0 && t >= L.start) { ov.hidden = false; ov.textContent = Math.ceil(L.t0 - t); }
   else if (!S.advancing) ov.hidden = true;
   if (!S.running || t < L.end) return;
@@ -489,6 +510,52 @@ $('#btnMicTest').onclick = async () => {
     requestAnimationFrame(loop);
   };
   loop();
+};
+
+// ---------- latency calibration: beeps, she claps on each; median lag = delay ----------
+$('#btnCalib').onclick = async () => {
+  const out = $('#calibOut'), btn = $('#btnCalib');
+  try { await ensureAudio(); } catch { out.textContent = 'mic blocked'; return; }
+  if (!analyser) { out.textContent = 'no mic'; return; }
+  btn.disabled = true;
+  const N = 10, gap = 0.8, t0 = ctx.currentTime + 1.5;
+  const beeps = [];
+  for (let i = 0; i < N; i++) {
+    const t = t0 + i * gap, o = ctx.createOscillator(), gn = ctx.createGain();
+    o.frequency.value = 1200; gn.gain.setValueAtTime(0, t);
+    gn.gain.linearRampToValueAtTime(0.4, t + 0.005); gn.gain.exponentialRampToValueAtTime(0.001, t + 0.08);
+    o.connect(gn).connect(ctx.destination); o.start(t); o.stop(t + 0.1);
+    beeps.push(t);
+  }
+  const buf = new Float32Array(analyser.fftSize), onsets = [];
+  let floor = 0, nf = 0, last = -1, prev = 0;
+  const end = t0 + N * gap + 0.6;
+  await new Promise(done => {
+    const loop = () => {
+      const now = ctx.currentTime;
+      analyser.getFloatTimeDomainData(buf);
+      let r = 0; for (let i = 0; i < buf.length; i++) r += buf[i] * buf[i];
+      r = Math.sqrt(r / buf.length);
+      if (now < t0 - 0.1) { floor += r; nf++; out.textContent = 'Get ready…'; }
+      else {
+        const th = Math.max(0.02, (floor / Math.max(1, nf)) * 5);
+        if (r > th && prev <= th && now - last > 0.3) { onsets.push(now); last = now; }
+        const k = Math.floor((now - t0) / gap) + 1;
+        out.textContent = k >= 1 && k <= N ? `Clap! ${k}/${N}` : '';
+      }
+      prev = r;
+      if (now < end) requestAnimationFrame(loop); else done();
+    };
+    loop();
+  });
+  btn.disabled = false;
+  const lags = beeps.slice(2).map(b => onsets.find(o => o > b + 0.02 && o < b + 0.6)).map((o, i) => o && o - beeps[i + 2]).filter(Boolean);
+  if (lags.length < 4) { out.textContent = `Heard ${lags.length} claps. Try again, a bit louder.`; return; }
+  lags.sort((a, b) => a - b);
+  const ms = Math.round((lags[lags.length >> 1] * 1000) / 10) * 10;
+  settings.latency = Math.min(600, Math.max(0, ms)); saveSettings();
+  $('#setLatency').value = settings.latency; $('#latOut').textContent = settings.latency;
+  out.textContent = `Delay set to ${settings.latency} ms ✓`;
 };
 
 // ---------- wake lock ----------

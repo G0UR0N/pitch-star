@@ -77,9 +77,10 @@
       <input id="setPass" type="range" min="50" max="95" step="5">
     </label>
     <label>Mic delay fix: <b id="latOut"></b> ms
-      <input id="setLatency" type="range" min="0" max="400" step="10">
+      <input id="setLatency" type="range" min="0" max="600" step="10">
     </label>
-    <p class="hint">Raise the delay fix if notes score late even when you sing on time (Bluetooth headphones need ~200+).</p>
+    <div class="mictest"><button type="button" id="btnCalib" class="btn small">🎧 Auto-set delay</button><span id="calibOut" class="hint"></span></div>
+    <p class="hint">Bluetooth headphones add delay. Tap <b>Auto-set delay</b> with your headphones on, then clap or say "ta!" on each beep you hear.</p>
     <div class="mictest">Mic test: <b id="micNote">—</b> <button type="button" id="btnMicTest" class="btn small">Start mic</button></div>
     <button class="btn primary wide">Done</button>
   </form>

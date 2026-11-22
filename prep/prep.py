@@ -17,7 +17,7 @@ import soundfile as sf
 import torch
 
 ROOT = Path(__file__).resolve().parent.parent
-SONGS_DIR = ROOT / "songs"
+SONGS_DIR = Path(os.environ.get("PSG_SONGS") or ROOT / "songs")
 TOOLS = Path(os.environ.get("PSG_TOOLS", Path.home() / "PitchScoreGameTools"))
 WORK = TOOLS / "work"
 BIN = TOOLS / "bin"

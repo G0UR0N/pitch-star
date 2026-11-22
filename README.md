@@ -5,7 +5,7 @@ Karaoke pitch-training game. PC preps songs; game runs in a browser (phone or PC
 ## Add a song (PC, no AI needed)
 1. Double-click `prep\prep.bat`.
 2. Paste a YouTube link (or drag in an audio file) and press Enter. Takes ~1–2 min.
-3. The pack appears in `songs\<name>.song`.
+3. The pack appears in `G:\My Drive\PitchStar\<name>.song` (Google Drive; set by `PSG_SONGS` in `prep.bat`).
 
 Batch: `prep\prep.bat <link1> <link2> ...`
 
@@ -16,7 +16,7 @@ Tools live in `%USERPROFILE%\PitchScoreGameTools` (Python env, ffmpeg, uv). Not 
 ## Phone
 - Game URL: https://g0ur0n.github.io/pitch-star/app/
 - iPhone (Safari): Share → **Add to Home Screen**. Android (Chrome): ⋮ → **Install app**.
-- Songs: `songs\` syncs through OneDrive. On the phone tap **Add songs** → browse OneDrive → pick `.song` files. They're stored in the app and work offline.
+- Songs: `G:\My Drive\PitchStar` syncs through Google Drive. On the phone tap **Add songs** → browse Google Drive → `PitchStar` → pick `.song` files. They're stored in the app and work offline.
 - App updates: after code changes run `publish.ps1` (right-click → Run with PowerShell).
 
 ## Play

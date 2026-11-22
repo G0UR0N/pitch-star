@@ -1,6 +1,8 @@
 @echo off
 rem Prep a song for the pitch game. Double-click, or: prep.bat <youtube-url | audio-file>
 set "PSG_TOOLS=%USERPROFILE%\PitchScoreGameTools"
+rem Where finished .song files go (synced to the phone by Google Drive)
+set "PSG_SONGS=G:\My Drive\PitchStar"
 set "UV_PYTHON_INSTALL_DIR=%PSG_TOOLS%\python"
 set "UV_PROJECT_ENVIRONMENT=%PSG_TOOLS%\venv"
 set "UV_CACHE_DIR=%PSG_TOOLS%\uv-cache"

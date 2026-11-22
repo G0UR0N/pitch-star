@@ -1,7 +1,8 @@
-import { readZip, writeZip } from './zip.js';
-import * as db from './db.js';
-import { detectPitch } from './pitch.js';
-import { framesToNotes, placeOctave, toPhrases, noteRange } from './melody.js';
+// ?v= stamps are rewritten by publish.ps1 so every publish loads fresh files past GitHub's CDN cache
+import { readZip, writeZip } from './zip.js?v=202611221658';
+import * as db from './db.js?v=202611221658';
+import { detectPitch } from './pitch.js?v=202611221658';
+import { framesToNotes, placeOctave, toPhrases, noteRange } from './melody.js?v=202611221658';
 
 const $ = s => document.querySelector(s);
 const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
@@ -737,7 +738,7 @@ function releaseWake() { wake?.release().catch(() => {}); wake = null; }
 
 // ---------- boot ----------
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
-  navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' });
+  navigator.serviceWorker.register('sw.js?v=202611221658', { updateViaCache: 'none' });
   // new version installed -> reload once, but never in the middle of a song
   const hadController = !!navigator.serviceWorker.controller;
   navigator.serviceWorker.addEventListener('controllerchange', () => {

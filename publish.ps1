@@ -18,6 +18,17 @@ $id = & $gh api user --jq .id
 # commit identity = GitHub no-reply address (keeps your real email private)
 & $git config user.name $login
 & $git config user.email "$id+$login@users.noreply.github.com"
+# stamp a build id into asset URLs + cache name so phones/PCs never mix old and new files
+$build = Get-Date -Format 'yyyyMMddHHmm'
+$utf8 = New-Object System.Text.UTF8Encoding $false
+foreach ($f in 'app\index.html', 'app\app.js', 'app\sw.js') {
+    $p = Join-Path $PSScriptRoot $f
+    $txt = [IO.File]::ReadAllText($p)
+    $txt = [regex]::Replace($txt, '(\.(?:js|css))\?v=\w+', "`$1?v=$build")
+    $txt = [regex]::Replace($txt, "psg-v\w+", "psg-v$build")
+    [IO.File]::WriteAllText($p, $txt, $utf8)
+}
+Write-Host "Build $build"
 & $git add -A
 & $git diff --cached --quiet
 if ($LASTEXITCODE -ne 0) { & $git commit -q -m "Update Pitch Star" }

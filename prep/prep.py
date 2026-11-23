@@ -372,10 +372,11 @@ def parse_lrc(s):
 # never ships lyrics (2026-11-22: "Jingle Bells" matched a different song's words).
 LYRIC_MATCH = 0.6    # a heard line must match a published line this well to take its text
 LYRIC_AGREE = 0.5    # share of heard words a published version must match to be used at all
-# Ship gate (user, 2026-11-22: "your lyric validation needs >90% certainty before shipping"):
-# lyrics ship only if a published version matches >= 90% of the heard words AND the lyric
-# lines cover >= 90% of the sung time. Otherwise the pack ships with no lyrics.
-LYRIC_SHIP = 0.9
+# Ship gate (user, 2026-11-22: "your lyric validation needs >90% certainty before shipping";
+# raised 2026-11-23: "lets bump the lyrics accuracy check to >95%"):
+# lyrics ship only if a published version matches > 95% of the heard words AND the lyric
+# lines cover > 95% of the sung time (strictly greater, as worded). Otherwise the pack ships with no lyrics.
+LYRIC_SHIP = 0.95
 
 
 _NUM = dict(enumerate("zero one two three four five six seven eight nine ten eleven twelve".split()))
@@ -565,8 +566,8 @@ def make_lyrics(title, vocals_wav, notes=None):
     if not lines:
         return lines, info
     cov = lyric_coverage(info.pop("spans", []), notes)
-    info["coverage"] = round(cov, 2)
-    sure = info["source"] == "heard+published" and info["agree"] >= LYRIC_SHIP and cov >= LYRIC_SHIP
+    info["coverage"] = round(cov, 3)  # 3 places so the app's "> 95%" check sees e.g. 0.953, not 0.95
+    sure = info["source"] == "heard+published" and info["agree"] > LYRIC_SHIP and cov > LYRIC_SHIP
     if not sure:
         log(f"lyrics: NOT shipped - certainty below {LYRIC_SHIP:.0%} (match {info['agree']:.0%}, coverage {cov:.0%})")
         return [], {**info, "source": "none", "lines": 0,

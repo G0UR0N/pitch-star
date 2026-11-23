@@ -1,8 +1,8 @@
 // ?v= stamps are rewritten by publish.ps1 so every publish loads fresh files past GitHub's CDN cache
-import { readZip, writeZip } from './zip.js?v=202611231027';
-import * as db from './db.js?v=202611231027';
-import { detectPitch } from './pitch.js?v=202611231027';
-import { framesToNotes, placeOctave, toPhrases, noteRange } from './melody.js?v=202611231027';
+import { readZip, writeZip } from './zip.js?v=202611231535';
+import * as db from './db.js?v=202611231535';
+import { detectPitch } from './pitch.js?v=202611231535';
+import { framesToNotes, placeOctave, toPhrases, noteRange } from './melody.js?v=202611231535';
 
 const $ = s => document.querySelector(s);
 const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
@@ -1069,7 +1069,7 @@ function releaseWake() { wake?.release().catch(() => {}); wake = null; }
 
 // ---------- boot ----------
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
-  navigator.serviceWorker.register('sw.js?v=202611231027', { updateViaCache: 'none' });
+  navigator.serviceWorker.register('sw.js?v=202611231535', { updateViaCache: 'none' });
   // new version installed -> reload once, but never in the middle of a song
   const hadController = !!navigator.serviceWorker.controller;
   navigator.serviceWorker.addEventListener('controllerchange', () => {
@@ -1082,9 +1082,18 @@ if ('serviceWorker' in navigator && location.protocol === 'https:') {
 // another song's words (2026-11-22). Remove them; re-adding the pack from Drive brings verified ones.
 // Packs checked before the >90% gate (no `coverage` in the record) could miss whole verses
 // (Jingle Bells' first verse): treat them the same. Lyrics the user saved (manual) are kept.
+// Ship gate raised to 95% (user, 2026-11-23: "lets bump the lyrics accuracy check to >95%"):
+// copies that passed only the old 90% gate lose their lyrics too.
+const LYRIC_SHIP = 0.95;
 function dropUnverified(meta) {
   const c = meta.lyricsCheck;
-  if (!meta.lyrics?.length || c?.source === 'manual' || c?.coverage != null) return false;
+  if (!meta.lyrics?.length || c?.source === 'manual') return false;
+  if (c?.coverage != null && (c.agree <= LYRIC_SHIP || c.coverage <= LYRIC_SHIP)) {
+    meta.lyrics = [];
+    meta.lyricsCheck = { ...c, source: 'none', reason: `below ${LYRIC_SHIP * 100}% certainty; add by hand with 📝` };
+    return true;
+  }
+  if (c?.coverage != null) return false;
   meta.lyrics = [];
   meta.lyricsCheck = { source: 'none', stale: true, reason: 'old unverified lyrics removed; re-add the song from Drive' };
   return true;

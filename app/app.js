@@ -1,8 +1,8 @@
 // ?v= stamps are rewritten by publish.ps1 so every publish loads fresh files past GitHub's CDN cache
-import { readZip, writeZip } from './zip.js?v=202611221902';
-import * as db from './db.js?v=202611221902';
-import { detectPitch } from './pitch.js?v=202611221902';
-import { framesToNotes, placeOctave, toPhrases, noteRange } from './melody.js?v=202611221902';
+import { readZip, writeZip } from './zip.js?v=202611221904';
+import * as db from './db.js?v=202611221904';
+import { detectPitch } from './pitch.js?v=202611221904';
+import { framesToNotes, placeOctave, toPhrases, noteRange } from './melody.js?v=202611221904';
 
 const $ = s => document.querySelector(s);
 const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
@@ -34,14 +34,16 @@ async function renderLibrary() {
   if (!songs.length) list.innerHTML = '<div class="empty">No songs yet. Tap <b>Add songs</b>.</div>';
   songs.sort((a, b) => a.title.localeCompare(b.title));
   for (const s of songs) {
-    const el = document.createElement('div'); el.className = 'card';
+    const el = document.createElement('div'); el.className = 'card song';
     el.innerHTML = `<div class="meta"><b></b><small>${fmtTime(s.meta.duration)} · ${s.meta.phrases.length} sections${best[s.id] != null ? ` · best ${best[s.id]}` : ''}</small></div>
-      <button class="btn primary small" data-a="sing">Sing</button>
-      <button class="icon" data-a="ly" title="Lyrics" aria-label="Lyrics">📝</button>
-      <button class="icon" data-a="rec" title="Record melody" aria-label="Record melody">🎙️</button>
-      <button class="icon" data-a="trim" title="Trim song end" aria-label="Trim">✂️</button>
-      <button class="icon" data-a="exp" title="Export song file" aria-label="Export">⤓</button>
-      <button class="icon" data-a="del" title="Remove" aria-label="Delete">🗑️</button>`;
+      <div class="actions">
+        <button class="btn primary small" data-a="sing">▶ Sing</button>
+        <button class="icon" data-a="ly" title="Lyrics" aria-label="Lyrics">📝</button>
+        <button class="icon" data-a="rec" title="Record melody" aria-label="Record melody">🎙️</button>
+        <button class="icon" data-a="trim" title="Trim song end" aria-label="Trim">✂️</button>
+        <button class="icon" data-a="exp" title="Export song file" aria-label="Export">⤓</button>
+        <button class="icon" data-a="del" title="Remove" aria-label="Delete">🗑️</button>
+      </div>`;
     el.querySelector('b').textContent = s.title + (s.meta.edited ? ' ✎' : '');
     el.querySelector('[data-a=sing]').onclick = () => openSong(s.id);
     el.querySelector('[data-a=rec]').onclick = () => openSong(s.id, { record: true });
@@ -931,7 +933,7 @@ function releaseWake() { wake?.release().catch(() => {}); wake = null; }
 
 // ---------- boot ----------
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
-  navigator.serviceWorker.register('sw.js?v=202611221902', { updateViaCache: 'none' });
+  navigator.serviceWorker.register('sw.js?v=202611221904', { updateViaCache: 'none' });
   // new version installed -> reload once, but never in the middle of a song
   const hadController = !!navigator.serviceWorker.controller;
   navigator.serviceWorker.addEventListener('controllerchange', () => {

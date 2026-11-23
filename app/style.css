@@ -19,6 +19,11 @@ input[type=search] { flex: 1 1 160px; width: auto; }
 #lyResults .btn { justify-content: flex-start; text-align: left; font-weight: 500; }
 #syncPanel .btn { flex: 1; padding: 18px; font-size: 1.1rem; }
 .micSel { max-width: 180px; text-overflow: ellipsis; }
+/* song list: full-width title on top (wraps, never squeezed), buttons in a row below */
+.card.song { flex-direction: column; align-items: stretch; gap: 8px; }
+.card.song .meta b { white-space: normal; overflow: visible; }
+.card.song .actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.card.song .actions .btn { margin-right: auto; }
 .card .icon { font-size: 1.2rem; padding: 4px; }
 #library, #results { overflow-y: auto; }
 h1 { font-size: 1.5rem; margin: 0; } h2 { font-size: 1.1rem; margin: 8px 0 0; color: var(--dim); }

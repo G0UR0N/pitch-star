@@ -1,13 +1,13 @@
 // Turn a sung pitch recording into clean target notes, and group notes into sections.
 // frames: [{t: seconds, m: midi float | null}] sorted by t.
 
-export function framesToNotes(frames, { minNote = 0.12, hyst = 0.6, gapBreak = 0.08 } = {}) {
+export function framesToNotes(frames, { minNote = 0.12, hyst = 0.8, gapBreak = 0.08 } = {}) {
   const v = frames.map(f => f.m);
-  // median filter (~150 ms) removes vibrato wobble and pitch-tracker spikes
+  // median filter (~150-200 ms at 60 fps) removes vibrato wobble and pitch-tracker spikes
   const sm = v.map((m, i) => {
     if (m == null) return null;
     const w = [];
-    for (let j = i - 4; j <= i + 4; j++) if (j >= 0 && j < v.length && v[j] != null) w.push(v[j]);
+    for (let j = i - 5; j <= i + 5; j++) if (j >= 0 && j < v.length && v[j] != null) w.push(v[j]);
     w.sort((a, b) => a - b);
     return w[w.length >> 1];
   });
@@ -24,8 +24,14 @@ export function framesToNotes(frames, { minNote = 0.12, hyst = 0.6, gapBreak = 0
     if (m == null) { cur = null; continue; }
     const x = m - tune, last = runs[runs.length - 1];
     if (cur == null || Math.abs(x - cur) > hyst || (last && t - last.e > gapBreak)) {
-      cur = Math.round(x); runs.push({ s: t, e: t + dt, p: cur });
-    } else last.e = t + dt;
+      cur = Math.round(x); runs.push({ s: t, e: t + dt, p: cur, i0: i, i1: i + 1 });
+    } else { last.e = t + dt; last.i1 = i + 1; }
+  }
+  // each note's pitch = median of its middle 60% (ignores the scoop in / fall off)
+  for (const r of runs) {
+    const n = r.i1 - r.i0, cut = Math.floor(n * 0.2);
+    const seg = v.slice(n - 2 * cut >= 3 ? r.i0 + cut : r.i0, n - 2 * cut >= 3 ? r.i1 - cut : r.i1).filter(m => m != null).map(m => m - tune).sort((a, b) => a - b);
+    if (seg.length) r.p = Math.round(seg[seg.length >> 1]);
   }
   // short runs (scoops, slides, consonants) join a touching neighbour, else drop
   for (let changed = true; changed;) {

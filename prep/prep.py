@@ -52,7 +52,7 @@ def fetch(src):
 
     import yt_dlp
 
-    with yt_dlp.YoutubeDL({"quiet": True, "noplaylist": True}) as y:
+    with yt_dlp.YoutubeDL({"quiet": True, "noplaylist": True, "socket_timeout": 20, "retries": 5}) as y:
         info = y.extract_info(src, download=False)
     title = info.get("title") or info.get("id")
     out = WORK / slugify(title)
@@ -66,6 +66,8 @@ def fetch(src):
         "outtmpl": str(out / "dl.%(ext)s"),
         "ffmpeg_location": str(BIN) if BIN.exists() else None,
         "quiet": True,
+        "socket_timeout": 20,
+        "retries": 5,
         "postprocessors": [{"key": "FFmpegExtractAudio", "preferredcodec": "wav"}],
     }
     with yt_dlp.YoutubeDL(opts) as y:
@@ -101,13 +103,51 @@ def separate(out):
     sf.write(out / "backing.wav", backing, sr)
 
 
+# ---------- 2b. lead vocal only (drop backup singers / harmonies) ----------
+LEAD_MODELS = ["mel_band_roformer_karaoke_aufr33_viperx_sdr_10.1956.ckpt", "UVR_MDXNET_KARA_2.onnx"]
+
+
+def isolate_lead(out):
+    """Karaoke model on the vocal stem: '(Vocals)' = lead singer, '(Instrumental)' = backing vocals."""
+    if (out / "lead.wav").exists():
+        log("lead vocal already isolated")
+        return True
+    try:
+        from audio_separator.separator import Separator
+    except ImportError:
+        log("audio-separator not installed; using all vocals")
+        return False
+    tmp = out / "lead_tmp"
+    tmp.mkdir(exist_ok=True)
+    sep = Separator(output_dir=str(tmp), model_file_dir=str(TOOLS / "models"), output_format="WAV")
+    for model in LEAD_MODELS:
+        try:
+            sep.load_model(model_filename=model)
+            files = sep.separate(str(out / "vocals.wav"))
+            lead = next(Path(tmp, Path(f).name) for f in files if "(vocals)" in Path(f).name.lower())
+            shutil.move(str(lead), out / "lead.wav")
+            log(f"lead vocal isolated with {model}")
+            return True
+        except Exception as e:  # try the next model
+            log(f"lead model {model} failed: {e}")
+    return False
+
+
 # ---------- 3. pitch track ----------
 def track_pitch(out):
     import torchcrepe
     from scipy.ndimage import median_filter
     from scipy.signal import resample_poly
 
-    wav, sr = sf.read(out / "vocals.wav", dtype="float32", always_2d=True)
+    src = out / "vocals.wav"
+    if (out / "lead.wav").exists():
+        rms = lambda f: float(np.sqrt((sf.read(f, dtype="float32")[0] ** 2).mean()) + 1e-12)
+        ratio = rms(out / "lead.wav") / rms(out / "vocals.wav")
+        if ratio > 0.3:
+            src = out / "lead.wav"
+        else:  # karaoke model swallowed the lead (e.g. unusual voice): keep all vocals
+            log(f"lead track nearly silent ({ratio:.2f}); using all vocals")
+    wav, sr = sf.read(src, dtype="float32", always_2d=True)
     mono = wav.mean(1)
     audio16 = resample_poly(mono, 16000, sr).astype(np.float32)
     hop = int(16000 * HOP_S)
@@ -126,19 +166,29 @@ def track_pitch(out):
     loud = rms_db > (np.percentile(rms_db, 95) - 35)
     voiced = (per > 0.45) & loud
     midi = 69 + 12 * np.log2(np.maximum(f0, 1e-3) / 440.0)
-    midi = median_filter(midi, 5)
-    midi[~voiced] = np.nan
+    midi[~voiced] = np.nan  # smoothing happens per voiced stretch in to_notes
     return midi
 
 
 # ---------- 4. notes ----------
-def to_notes(midi):
+def to_notes(midi, smooth_s=0.15, hyst=0.8, min_note_s=0.12):
+    """Base notes only: vibrato, scoops and slides are smoothed away; each note's pitch is the
+    median of its steady part, not its first frame."""
+    from scipy.ndimage import median_filter
+
     v = ~np.isnan(midi)
     # global tuning offset (recordings are rarely exactly A440)
     frac = midi[v] - np.round(midi[v])
     ang = np.angle(np.mean(np.exp(2j * np.pi * frac)))
     tune = ang / (2 * np.pi)
-    m = midi - tune
+    raw = midi - tune
+
+    # heavy median smoothing inside each voiced stretch (kills ~5-6 Hz vibrato wobble)
+    m = raw.copy()
+    k = max(3, int(smooth_s / HOP_S) | 1)
+    edges = np.flatnonzero(np.diff(np.r_[0, v.astype(int), 0]))
+    for a, b in zip(edges[::2], edges[1::2]):
+        m[a:b] = median_filter(raw[a:b], size=min(k, (b - a) | 1), mode="nearest")
 
     # hysteresis quantization -> runs
     runs = []  # [start_frame, end_frame_excl, pitch]
@@ -147,13 +197,13 @@ def to_notes(midi):
         if np.isnan(x):
             cur = None
             continue
-        if cur is None or abs(x - cur) > 0.7:
+        if cur is None or abs(x - cur) > hyst:
             cur = int(round(x))
             runs.append([i, i + 1, cur])
         else:
             runs[-1][1] = i + 1
 
-    min_len = int(0.08 / HOP_S)
+    min_len = int(min_note_s / HOP_S)
     # absorb short runs into touching neighbors, else drop
     changed = True
     while changed:
@@ -170,7 +220,15 @@ def to_notes(midi):
             runs.pop(k)
             changed = True
             break
-    # merge same-pitch runs with tiny gaps
+    # pitch of each note = median of its middle 60% (skips the scoop in and the fall off)
+    for r in runs:
+        s, e = r[0], r[1]
+        cut = int((e - s) * 0.2)
+        seg = raw[s + cut:e - cut] if e - s - 2 * cut >= 3 else raw[s:e]
+        seg = seg[~np.isnan(seg)]
+        if len(seg):
+            r[2] = int(round(float(np.median(seg))))
+    # merge same-pitch runs that touch or have tiny gaps
     merged = []
     for r in runs:
         if merged and merged[-1][2] == r[2] and r[0] - merged[-1][1] <= int(0.03 / HOP_S):
@@ -369,6 +427,8 @@ def prep(src, force_kind=None):
     separate(out)
     kind = force_kind or ("vocal" if vocal_ratio(out) > 0.05 else "instrumental")
     if kind == "vocal":
+        log("isolating lead singer (removing backup vocals)...")
+        isolate_lead(out)
         log("tracking sung melody...")
         notes, tune = to_notes(track_pitch(out))
     else:

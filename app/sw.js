@@ -1,5 +1,5 @@
 // Offline cache for the app shell. Bump VERSION when app files change.
-const VERSION = 'psg-v202611221753';
+const VERSION = 'psg-v202611221849';
 const FILES = ['./', 'index.html', 'style.css', 'app.js', 'zip.js', 'db.js', 'pitch.js', 'melody.js', 'manifest.webmanifest', 'icon.svg', 'icon-192.png', 'icon-512.png'];
 self.addEventListener('install', e => e.waitUntil(caches.open(VERSION).then(c => c.addAll(FILES)).then(() => self.skipWaiting())));
 self.addEventListener('activate', e => e.waitUntil(

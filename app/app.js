@@ -1,8 +1,8 @@
 // ?v= stamps are rewritten by publish.ps1 so every publish loads fresh files past GitHub's CDN cache
-import { readZip, writeZip } from './zip.js?v=202611221706';
-import * as db from './db.js?v=202611221706';
-import { detectPitch } from './pitch.js?v=202611221706';
-import { framesToNotes, placeOctave, toPhrases, noteRange } from './melody.js?v=202611221706';
+import { readZip, writeZip } from './zip.js?v=202611221753';
+import * as db from './db.js?v=202611221753';
+import { detectPitch } from './pitch.js?v=202611221753';
+import { framesToNotes, placeOctave, toPhrases, noteRange } from './melody.js?v=202611221753';
 
 const $ = s => document.querySelector(s);
 const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
@@ -39,6 +39,7 @@ async function renderLibrary() {
       <button class="btn primary small" data-a="sing">Sing</button>
       <button class="icon" data-a="ly" title="Lyrics" aria-label="Lyrics">📝</button>
       <button class="icon" data-a="rec" title="Record melody" aria-label="Record melody">🎙️</button>
+      <button class="icon" data-a="trim" title="Trim song end" aria-label="Trim">✂️</button>
       <button class="icon" data-a="exp" title="Export song file" aria-label="Export">⤓</button>
       <button class="icon" data-a="del" title="Remove" aria-label="Delete">🗑️</button>`;
     el.querySelector('b').textContent = s.title + (s.meta.edited ? ' ✎' : '');
@@ -46,6 +47,7 @@ async function renderLibrary() {
     el.querySelector('[data-a=rec]').onclick = () => openSong(s.id, { record: true });
     el.querySelector('[data-a=ly]').onclick = () => openLyrics(s.id);
     el.querySelector('[data-a=exp]').onclick = () => exportSong(s.id);
+    el.querySelector('[data-a=trim]').onclick = () => trimSong(s.id);
     el.querySelector('[data-a=del]').onclick = async () => {
       if (confirm(`Remove "${s.title}"?`)) { await db.deleteSong(s.id); renderLibrary(); }
     };
@@ -292,6 +294,7 @@ function tick() {
   }
   judge(ts);
   melody(t);
+  if (S.mode === 'song' && S.running && t >= S.meta.duration) { finishSong(); return; } // trimmed songs end early
   // re-sync guide track only on real drift, at most every 2 s (each seek stutters)
   if (S.running && performance.now() > S.nextSync && Math.abs(S.vocals.currentTime - S.backing.currentTime) > 0.15) {
     S.vocals.currentTime = S.backing.currentTime; S.nextSync = performance.now() + 2000;
@@ -658,6 +661,24 @@ $('#btnRecKeep').onclick = async () => {
   openSong(id, sel >= 0 ? { practice: { queue: [Math.min(sel, song.meta.phrases.length - 1)], fromResults: false }, hearNotes: true } : { hearNotes: true });
 };
 
+// ---------- trim: end the song early (drops notes/sections/lyrics after it) ----------
+async function trimSong(id) {
+  const s = await db.getSong(id), cur = fmtTime(s.meta.duration);
+  const v = prompt(`End "${s.title}" at (m:ss)? Now ends at ${cur}.`, cur);
+  if (!v) return;
+  const m = v.trim().match(/^(\d+):(\d{1,2})$/);
+  if (!m) { toast('Use m:ss, like 3:18'); return; }
+  const end = +m[1] * 60 + +m[2];
+  if (end < 5 || end > s.meta.duration) { toast('That time is outside the song'); return; }
+  const notes = s.meta.notes.filter(n => n.t < end)
+    .map(n => (n.t + n.d > end ? { ...n, d: +(end - n.t).toFixed(3) } : n)).filter(n => n.d >= 0.08);
+  s.meta = { ...s.meta, duration: end, notes, phrases: toPhrases(notes), range: noteRange(notes),
+    lyrics: (s.meta.lyrics || []).filter(l => l.t == null || l.t < end) };
+  await db.putSong(s);
+  toast(`Song now ends at ${fmtTime(end)} ✓`);
+  renderLibrary();
+}
+
 // ---------- export a song pack (e.g. after re-recording the melody) ----------
 async function exportSong(id) {
   const s = await db.getSong(id);
@@ -910,7 +931,7 @@ function releaseWake() { wake?.release().catch(() => {}); wake = null; }
 
 // ---------- boot ----------
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
-  navigator.serviceWorker.register('sw.js?v=202611221706', { updateViaCache: 'none' });
+  navigator.serviceWorker.register('sw.js?v=202611221753', { updateViaCache: 'none' });
   // new version installed -> reload once, but never in the middle of a song
   const hadController = !!navigator.serviceWorker.controller;
   navigator.serviceWorker.addEventListener('controllerchange', () => {

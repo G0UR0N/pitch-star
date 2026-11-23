@@ -1,4 +1,4 @@
-"""Verify the lyrics in .song packs against the singing in each pack (Whisper), and with
+﻿"""Verify the lyrics in .song packs against the singing in each pack (Whisper), and with
 --fix replace them with verified lyrics. Writes a report to tools/lyrics_check.log.
 Usage: lyrics_check.py [--fix] [file.song ...]   (default: every pack in PSG_SONGS)"""
 import json
@@ -33,7 +33,7 @@ for path in files:
         with tempfile.TemporaryDirectory() as td:
             mp3 = Path(td) / "vocals.mp3"
             mp3.write_bytes(parts["vocals.mp3"])
-            new, info = prep.make_lyrics(meta["title"], mp3)
+            new, info = prep.make_lyrics(meta["title"], mp3, meta.get("notes"))
     else:
         new, info = [], {"source": "none", "reason": "instrumental: nothing sung to verify against"}
     same = [l["text"] for l in old] == [l["text"] for l in new]

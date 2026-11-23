@@ -372,6 +372,10 @@ def parse_lrc(s):
 # never ships lyrics (2026-11-22: "Jingle Bells" matched a different song's words).
 LYRIC_MATCH = 0.6    # a heard line must match a published line this well to take its text
 LYRIC_AGREE = 0.5    # share of heard words a published version must match to be used at all
+# Ship gate (user, 2026-11-22: "your lyric validation needs >90% certainty before shipping"):
+# lyrics ship only if a published version matches >= 90% of the heard words AND the lyric
+# lines cover >= 90% of the sung time. Otherwise the pack ships with no lyrics.
+LYRIC_SHIP = 0.9
 
 
 _NUM = dict(enumerate("zero one two three four five six seven eight nine ten eleven twelve".split()))
@@ -382,20 +386,51 @@ def _words(s):
     return [_NUM.get(int(w), w) if w.isdigit() else w for w in ws]
 
 
-def transcribe(wav):
-    """[{t, text, words:[{t, w}], ok}] from Whisper; ok=False marks low-confidence segments."""
+def _segs(r, off=0.0):
+    out = []
+    for s in r["segments"]:
+        ws = [{"t": round(w["start"] + off, 2), "e": round(w["end"] + off, 2), "w": w["word"].strip()}
+              for w in s.get("words", []) if w["word"].strip()]
+        if ws:
+            out.append({"t": ws[0]["t"], "text": s["text"].strip(), "words": ws,
+                        "ok": s["avg_logprob"] > -0.8 and s["no_speech_prob"] < 0.6 and s["compression_ratio"] < 2.4})
+    return out
+
+
+def _uncovered(notes, segs):
+    """Sung stretches (>= 2 s) with no heard word near them."""
+    heard = sorted(w["t"] for s in segs for w in s["words"])
+    gaps = []
+    for n in notes:
+        if any(abs(n["t"] - t) <= 2.0 for t in heard):
+            continue
+        end = n["t"] + n["d"]
+        if gaps and n["t"] - gaps[-1][1] < 2:
+            gaps[-1][1] = end
+        else:
+            gaps.append([n["t"], end])
+    return [g for g in gaps if g[1] - g[0] >= 2]
+
+
+def transcribe(wav, notes=None):
+    """[{t, text, words:[{t, w}], ok}] from Whisper; ok=False marks low-confidence segments.
+    Whisper can skip a whole sung stretch (2026-11-22: Jingle Bells' first verse, 10-28 s,
+    behind the intro). Sung sections with no heard words are listened to again on their own."""
     import whisper
     m = whisper.load_model("small", device=DEVICE, download_root=str(TOOLS / "models" / "whisper"))
-    r = m.transcribe(str(wav), language="en", word_timestamps=True, condition_on_previous_text=False, verbose=None)
+    kw = dict(language="en", word_timestamps=True, condition_on_previous_text=False, verbose=None)
+    segs = _segs(m.transcribe(str(wav), **kw))
+    if notes:
+        audio = whisper.load_audio(str(wav))
+        for a, b in _uncovered(notes, segs):
+            a, b = max(0.0, a - 1.0), b + 1.0
+            extra = _segs(m.transcribe(audio[int(a * 16000):int(b * 16000)], **kw), a)
+            log(f"lyrics: re-listened {a:.0f}-{b:.0f} s, heard {sum(len(s['words']) for s in extra)} words")
+            segs += extra
+        segs.sort(key=lambda s: s["t"])
     del m
     if DEVICE == "cuda":
         torch.cuda.empty_cache()
-    segs = []
-    for s in r["segments"]:
-        ws = [{"t": round(w["start"], 2), "w": w["word"].strip()} for w in s.get("words", []) if w["word"].strip()]
-        if ws:
-            segs.append({"t": ws[0]["t"], "text": s["text"].strip(), "words": ws,
-                         "ok": s["avg_logprob"] > -0.8 and s["no_speech_prob"] < 0.6 and s["compression_ratio"] < 2.4})
     return segs
 
 
@@ -427,8 +462,9 @@ def align_lyrics(segs, cand=None):
     1-3 consecutive published lines that best match it (if >= LYRIC_MATCH). Returns
     (lines, share of heard words that matched)."""
     from difflib import SequenceMatcher
-    lines, matched, total, dropped = [], 0, 0, []
+    lines, matched, total, dropped, spans = [], 0, 0, [], []
     align_lyrics.dropped = dropped
+    align_lyrics.spans = spans  # heard time of the confirmed lines (for the coverage check)
     pub = [(l, _words(l)) for l in (cand or [])]
 
     def flat_of(s):
@@ -440,7 +476,7 @@ def align_lyrics(segs, cand=None):
     def best_win(flat):
         best = (0.0, None)
         for i in range(len(pub)):
-            for n in (1, 2, 3):
+            for n in range(1, 9):  # a re-listened stretch can hold a whole verse
                 win = pub[i:i + n]
                 if len(win) < n:
                     break
@@ -469,6 +505,7 @@ def align_lyrics(segs, cand=None):
         best = best_win(flat)
         if best[1] and best[0] >= LYRIC_MATCH:
             matched += len(flat)
+            spans.append((s["words"][0]["t"], max(w.get("e", w["t"]) for w in s["words"])))
             win = best[1]
             sm = SequenceMatcher(None, flat, [w for _, x in win for w in x], autojunk=False)
             pos = 0
@@ -492,10 +529,36 @@ def align_lyrics(segs, cand=None):
     return lines, (matched / total if total else 0.0)
 
 
-def make_lyrics(title, vocals_wav):
-    """Verified lyrics for a sung recording: (lines, check-info). Never raises."""
+def lyric_coverage(spans, notes):
+    """Share of sung time (notes, by length) inside the heard time of confirmed lyric lines
+    (first word start - 1 s .. last word end + 1 s, so held notes count)."""
+    if not notes:
+        return 1.0
+    tot = sum(n["d"] for n in notes)
+    cov = sum(n["d"] for n in notes if any(a - 1.0 <= n["t"] <= b + 1.0 for a, b in spans))
+    return cov / tot if tot else 1.0
+
+
+def make_lyrics(title, vocals_wav, notes=None):
+    """Verified lyrics for a sung recording: (lines, check-info). Never raises.
+    Ships only at > LYRIC_SHIP certainty, else no lyrics (see LYRIC_SHIP)."""
+    lines, info = _make_lyrics(title, vocals_wav, notes)
+    if not lines:
+        return lines, info
+    cov = lyric_coverage(info.pop("spans", []), notes)
+    info["coverage"] = round(cov, 2)
+    sure = info["source"] == "heard+published" and info["agree"] >= LYRIC_SHIP and cov >= LYRIC_SHIP
+    if not sure:
+        log(f"lyrics: NOT shipped - certainty below {LYRIC_SHIP:.0%} (match {info['agree']:.0%}, coverage {cov:.0%})")
+        return [], {**info, "source": "none", "lines": 0,
+                    "reason": f"below {LYRIC_SHIP:.0%} certainty (match {info['agree']:.0%}, sung time covered {cov:.0%}); add by hand with 📝"}
+    log(f"lyrics: shipped, match {info['agree']:.0%}, sung time covered {cov:.0%}")
+    return lines, info
+
+
+def _make_lyrics(title, vocals_wav, notes=None):
     try:
-        segs = transcribe(vocals_wav)
+        segs = transcribe(vocals_wav, notes)
     except Exception as e:
         log(f"lyrics: transcription failed ({e}); no lyrics shipped")
         return [], {"source": "none", "reason": f"transcription failed: {e}"}
@@ -517,7 +580,7 @@ def make_lyrics(title, vocals_wav):
     if c and agree >= LYRIC_AGREE:
         lines, agree = align_lyrics(segs, c["lines"])  # re-run to keep its dropped list
         info = {"source": "heard+published", "published": c["name"], "agree": round(agree, 2),
-                "unconfirmed": align_lyrics.dropped}
+                "unconfirmed": align_lyrics.dropped, "spans": align_lyrics.spans}
         log(f"lyrics: verified, {agree:.0%} of heard words match '{c['name']}'")
     else:
         lines, _ = align_lyrics(segs)
@@ -546,7 +609,7 @@ def pack(title, out, notes, phrases, tune, kind="vocal"):
         "phrases": phrases,
     }
     if kind == "vocal":
-        meta["lyrics"], meta["lyricsCheck"] = make_lyrics(title, out / "vocals.wav")
+        meta["lyrics"], meta["lyricsCheck"] = make_lyrics(title, out / "vocals.wav", notes)
     else:  # no singing to check against -> no lyrics (add them by hand in the app's 📝 dialog)
         meta["lyrics"], meta["lyricsCheck"] = [], {"source": "none", "reason": "instrumental: nothing sung to verify against"}
     meta["lyricsTried"] = True

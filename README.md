@@ -43,13 +43,16 @@ Best on the PC in Chrome/Edge (open the game URL), headphones on.
 
 ## Lyrics (automatic, verified)
 - **Every pack's lyrics are verified against the singing before they ship** (user, 2026-11-22: "make sure every lyric pack is verified before shipped"). `prep.bat` transcribes the vocal stem with Whisper (`small`, GPU, ~16 s). That gives the timing. Published lyrics (LRCLIB) only correct a heard line's words when they match it (≥ 60% of words), and only when that version matches ≥ 50% of everything heard. Heard lines a matching version can't confirm are dropped (likely mishearings). With no matching version, the heard lines are used as-is.
+- **Ship gate: > 90% certainty** (user, 2026-11-22: "your lyric validation needs >90% certainty before shipping"). Lyrics ship only if a published version matches ≥ 90% of the heard words **and** the confirmed lines cover ≥ 90% of the sung time (notes inside the heard span of a confirmed line, ±1 s). Otherwise the pack ships with no lyrics, and `lyricsCheck.reason` says why. Heard-only lyrics (no published match) never ship.
+- Whisper can skip a whole sung stretch (Jingle Bells' first verse, 0:09–0:28, was missed behind the intro). Any sung stretch of 2 s or more with no heard word is transcribed again on its own. One heard stretch may match up to 8 published lines.
 - Instrumental packs ship no lyrics (nothing sung to check against). Add them by hand with 📝.
 - Each pack records the result in `song.json` → `lyricsCheck` (source, match %, unconfirmed lines).
 - The app never adds lyrics by title on its own; 📝 → **Find** is a manual pick. Lyrics saved in 📝 count as checked by the user (`lyricsCheck.source = manual`).
 - Old copies: the app keeps its own copy of each song, so fixing a pack in Drive doesn't change what is already added. When the app starts (and when a pack is imported), it removes lyrics that have no check record (2026-11-22, after the old Jingle Bells copy still showed another song's words). Such songs then show no lyrics until re-added, so a yellow banner at the top of the song list names them and opens the file picker when tapped (the card shows the same button, since folders can hide it). Re-adding keeps the name and folder.
 - Check or repair packs: `tools\lyrics_check.py [--fix] [file.song]` (default: every pack in Drive; backups go to `PitchScoreGameTools\backup`; report in `tools\lyrics_check.log`). `tools\show_lyrics.py <pack|folder>` prints them.
 - Why: on 2026-11-22, a title-only match gave Jingle Bells another song's words ("…you filthy animal").
-- Known gap: belted or unclear passages (e.g. Where Are You Christmas, 110–130 s) aren't recognised, so they show no lyrics.
+- Known gap: belted or unclear singing isn't recognised. The sung Where Are You Christmas (match 73%, coverage 83%) therefore ships no lyrics; add them by hand with 📝.
+- Copies checked before the 90% gate (no `coverage` in `lyricsCheck`) are also treated as old by the app and need re-adding.
 - Karaoke line under the notes: words light up with the melody; next line shown dim. **Lyrics** checkbox on the play screen turns them on/off.
 - If the timing is off: 📝 → **Save + tap to sync**, then tap (or Space) as each line starts. 📝 → **Find** picks a different version.
 

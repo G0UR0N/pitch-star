@@ -37,7 +37,7 @@ Best on the PC in Chrome/Edge (open the game URL), headphones on.
 - On the PC: `tools\trim_song.py "<file.song>" 3:18` (venv python) trims the file itself, audio included.
 
 ## Song list: names and folders
-- Cards show a short name (e.g. "Jingle Bells"). It comes from the published title the lyrics were verified against, otherwise from the first part of the video title. The rest of the title (artist, source) is shown as subtext.
+- Cards show a short name (e.g. "Jingle Bells"). It comes from the published title the lyrics were verified against, otherwise from the video title: the part before the first "|", and in "Artist - Title" the part after the dash, unless that part is only a description such as "Piano accompaniment". The song name is always the bold line (user, 2026-11-22). The rest of the title (artist, source) is shown as subtext.
 - ✏️ on a card sets your own name and a folder. Type a new folder or pick an existing one; leave it empty to clear. Folders collapse with a tap, and that state is remembered.
 - Name and folder are stored on the phone and kept when an updated pack is re-added (user request, 2026-11-22).
 

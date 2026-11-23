@@ -1,8 +1,8 @@
 // ?v= stamps are rewritten by publish.ps1 so every publish loads fresh files past GitHub's CDN cache
-import { readZip, writeZip } from './zip.js?v=202611222153';
-import * as db from './db.js?v=202611222153';
-import { detectPitch } from './pitch.js?v=202611222153';
-import { framesToNotes, placeOctave, toPhrases, noteRange } from './melody.js?v=202611222153';
+import { readZip, writeZip } from './zip.js?v=202611222200';
+import * as db from './db.js?v=202611222200';
+import { detectPitch } from './pitch.js?v=202611222200';
+import { framesToNotes, placeOctave, toPhrases, noteRange } from './melody.js?v=202611222200';
 
 const $ = s => document.querySelector(s);
 const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
@@ -72,7 +72,7 @@ async function renderLibrary() {
   }
   for (const s of songs) {
     const el = document.createElement('div'); el.className = 'card song';
-    el.innerHTML = `<div class="meta"><b></b><small class="desc"></small><small>${fmtTime(s.meta.duration)} · ${s.meta.phrases.length} sections${best[s.id] != null ? ` · best ${best[s.id]}` : ''}${s.meta.edited ? ' · ✎ own melody' : ''}</small></div>
+    el.innerHTML = `<div class="meta"><b></b><small class="desc"></small><small>${fmtTime(s.meta.duration)} · ${s.meta.phrases.length} sections${best[s.id] != null ? ` · best ${best[s.id]}` : ''}${s.meta.edited ? ' · ✎ own melody' : ''}${s.meta.lyricsCheck?.stale ? ' · ⚠ re-add from Drive for lyrics' : ''}</small></div>
       <div class="actions">
         <button class="btn primary small" data-a="sing">▶ Sing</button>
         <button class="icon" data-a="edit" title="Name & folder" aria-label="Name and folder">✏️</button>
@@ -132,6 +132,7 @@ async function importPack(buf, fname) {
   // re-adding an updated pack keeps the name and folder chosen on this phone
   const old = await db.getSong(id);
   for (const k of ['name', 'group']) if (old?.meta?.[k] && !meta[k]) meta[k] = old.meta[k];
+  dropUnverified(meta); // an old pack file still carries unverified lyrics
   await db.putSong({
     id, title: meta.title, meta,
     backing: new Blob([z['backing.mp3']], { type: 'audio/mpeg' }),
@@ -847,7 +848,8 @@ $('#btnLyFind').onclick = async () => {
 async function saveLyrics() {
   const lines = $('#lyText').value.split('\n').map(l => l.trim()).filter(Boolean);
   const s = await db.getSong(lyId);
-  s.meta = { ...s.meta, lyricsTried: true, lyrics: lines.map((text, i) => ({ t: lyTimes ? lyTimes[i] : null, text })) };
+  s.meta = { ...s.meta, lyricsTried: true, lyricsCheck: { source: 'manual' }, // picked/typed by the user = checked by the user
+    lyrics: lines.map((text, i) => ({ t: lyTimes ? lyTimes[i] : null, text })) };
   await db.putSong(s);
   return s;
 }
@@ -998,7 +1000,7 @@ function releaseWake() { wake?.release().catch(() => {}); wake = null; }
 
 // ---------- boot ----------
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
-  navigator.serviceWorker.register('sw.js?v=202611222153', { updateViaCache: 'none' });
+  navigator.serviceWorker.register('sw.js?v=202611222200', { updateViaCache: 'none' });
   // new version installed -> reload once, but never in the middle of a song
   const hadController = !!navigator.serviceWorker.controller;
   navigator.serviceWorker.addEventListener('controllerchange', () => {
@@ -1007,7 +1009,19 @@ if ('serviceWorker' in navigator && location.protocol === 'https:') {
     reload();
   });
 }
+// Lyrics without a check record (lyricsCheck) came from the old title-only lookup and can be
+// another song's words (2026-11-22). Remove them; re-adding the pack from Drive brings verified ones.
+function dropUnverified(meta) {
+  if (!meta.lyrics?.length || meta.lyricsCheck) return false;
+  meta.lyrics = [];
+  meta.lyricsCheck = { source: 'none', stale: true, reason: 'old unverified lyrics removed; re-add the song from Drive' };
+  return true;
+}
+async function cleanOldLyrics() {
+  for (const s of await db.allSongs()) if (dropUnverified(s.meta)) await db.putSong(s);
+}
 (async () => {
+  await cleanOldLyrics();
   const load = params.get('load'); // dev: ?load=../songs/x.song
   if (load) {
     try { const r = await fetch(load); await importPack(await r.arrayBuffer(), load.split('/').pop()); } catch (e) { toast('load failed: ' + e.message); }

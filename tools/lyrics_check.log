@@ -1,7 +1,18 @@
-lyrics check 2026-11-22 23:54  (fix)
+lyrics check 2026-11-23 09:53  (fix)
+
+== dpee-all-i-want-for-christmas-is-my-two-front-teethwmv.song  [vocal]
+   shipped: 0 lines (checked)  ->  verified: 22 lines, {'source': 'heard+published', 'published': '(all I want for Christmas is) My two front teeth – Nat King Cole', 'agree': 0.92, 'unconfirmed': ['27.8 Dicka-doodi-dick, not as it will', '73.6 This, this, this, this, this, this is not a simple'], 'lines': 22, 'heard': 202, 'coverage': 0.94}
+   shipped lyrics DIFFER from the verified ones
+         9.08  All I want for Christmas is my two front teeth
+        12.84  My two front teeth, my two front teeth
+        16.98  Gee, if I could only have my two front teeth
+         20.3  Then I could wish you, Merry Christmas
+         23.2  It seems so long since I could say
+        31.94  Gosh, oh gee, how happy I'd be
+   FIXED (backup: dpee-all-i-want-for-christmas-is-my-two-front-teethwmv.20261123-0954.song)
 
 == its-beginning-to-look-a-lot-like-christmas.song  [vocal]
-   shipped: 26 lines (checked)  ->  verified: 26 lines, {'source': 'heard+published', 'published': "It's Beginning To Look A Lot Like Christmas – Bing Crosby, London Symphony Orchestra", 'agree': 0.99, 'unconfirmed': ['28.6 Thank you.'], 'lines': 26, 'heard': 92, 'coverage': 1.0}
+   shipped: 26 lines (checked)  ->  verified: 26 lines, {'source': 'heard+published', 'published': "It's Beginning To Look A Lot Like Christmas – Bing Crosby, London Symphony Orchestra", 'agree': 0.99, 'unconfirmed': ['28.6 Thank you.'], 'lines': 26, 'heard': 201, 'coverage': 1.0}
    shipped lyrics match the verified ones
         29.98  It's beginning to look a lot like Christmas
         33.58  Everywhere you go
@@ -9,18 +20,17 @@ lyrics check 2026-11-22 23:54  (fix)
         44.06  With candy canes and silver lanes that glow
         48.66  It's beginning to look a lot like Christmas
         53.38  Toys in every store
-   FIXED (backup: its-beginning-to-look-a-lot-like-christmas.20261122-2354.song)
 
 == jingle-bells-christmas-song-super-simple-songs.song  [vocal]
-   shipped: 40 lines (checked)  ->  verified: 48 lines, {'source': 'heard+published', 'published': 'Jingle Bells – SYML', 'agree': 0.97, 'unconfirmed': ['143.5 And I want her so pen slay'], 'lines': 48, 'heard': 66, 'coverage': 0.95}
+   shipped: 48 lines (checked)  ->  verified: 48 lines, {'source': 'heard+published', 'published': 'Jingle Bells – Michael Bublé & The Puppini Sisters', 'agree': 0.97, 'unconfirmed': ['143.5 And I want her so pen slay'], 'lines': 48, 'heard': 252, 'coverage': 0.95}
    shipped lyrics DIFFER from the verified ones
          8.85  Dashing through the snow
-        11.45  In a one-horse open sleigh
+        11.45  In a one horse open sleigh
         14.83  O'er the fields we go
-        16.17  Laughing all the way
-        18.75  Bells on bob-tails ring
-        21.05  Making spirits bright.
-   FIXED (backup: jingle-bells-christmas-song-super-simple-songs.20261122-2354.song)
+        16.19  Laughing all the way
+        18.75  Bells on bob tail ring
+        21.03  Making spirits bright
+   FIXED (backup: jingle-bells-christmas-song-super-simple-songs.20261123-0954.song)
 
 == twinkle-test.song  [None]
    shipped: 0 lines (checked)  ->  verified: 0 lines, {'source': 'none', 'reason': 'instrumental: nothing sung to verify against'}
@@ -31,6 +41,6 @@ lyrics check 2026-11-22 23:54  (fix)
    shipped lyrics match the verified ones
 
 == where-are-you-christmas-taylor-momsen-how-the-grinch-stole-c.song  [vocal]
-   shipped: 10 lines (checked)  ->  verified: 0 lines, {'source': 'none', 'published': 'Where Are You Christmas? – William Fitzsimmons', 'agree': 0.73, 'unconfirmed': ['84.1 Are you okay, player?', '101.1 Bow, lotus, fluent grandpaega!!', '121.4 Beat our birds out?', '124.0 reward', '124.2 HAAA giraffe is in no choice', '128.6 MOOOOOOON', '150.5 you'], 'lines': 0, 'heard': 41, 'coverage': 0.83, 'reason': 'below 90% certainty (match 73%, sung time covered 83%); add by hand with 📝'}
-   shipped lyrics DIFFER from the verified ones
-   FIXED (backup: where-are-you-christmas-taylor-momsen-how-the-grinch-stole-c.20261122-2355.song)
+   shipped: 0 lines (checked)  ->  verified: 0 lines, {'source': 'none', 'published': 'Where Are You Christmas? – The Pretty Reckless', 'agree': 0.67, 'unconfirmed': ['79.8 Trust me', '110.2 Right.', '111.6 Wait!', '116.3 Rrrrrr', '121.2 Be a tabasote!', '124.5 Hey, necessities!', '126.6 No!', '126.8 Please slide!', '128.0 Oh!', '130.1 Oh!', '130.5 Oh!', '133.1 Oh!', '134.1 Oh!', '134.3 Oh!', '134.9 Oh!', '135.9 Oh!', '136.4 Oh!', '136.9 Oh!', '137.0 Oh!', '137.2 Oh!', '137.4 Oh!', '149.5 you'], 'lines': 0, 'heard': 81, 'coverage': 0.83, 'reason': 'below 90% certainty (match 67%, sung time covered 83%); add by hand with 📝'}
+   shipped lyrics match the verified ones
+   FIXED (backup: where-are-you-christmas-taylor-momsen-how-the-grinch-stole-c.20261123-0955.song)

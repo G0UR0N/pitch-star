@@ -389,6 +389,8 @@ def _words(s):
 def _segs(r, off=0.0):
     out = []
     for s in r["segments"]:
+        if s["compression_ratio"] > 2.4:  # stuck repeating ("this, this, this…"): discard, gap pass re-listens
+            continue
         ws = [{"t": round(w["start"] + off, 2), "e": round(w["end"] + off, 2), "w": w["word"].strip()}
               for w in s.get("words", []) if w["word"].strip()]
         if ws:
@@ -418,15 +420,22 @@ def transcribe(wav, notes=None):
     behind the intro). Sung sections with no heard words are listened to again on their own."""
     import whisper
     m = whisper.load_model("small", device=DEVICE, download_root=str(TOOLS / "models" / "whisper"))
+    # Whisper retries unsure parts with randomness: a fixed seed gives the same result every run
+    # (2026-11-23: one pack gave 47 words, then 0). Temperature 0 alone got stuck in loops.
     kw = dict(language="en", word_timestamps=True, condition_on_previous_text=False, verbose=None)
+    torch.manual_seed(0)
     segs = _segs(m.transcribe(str(wav), **kw))
     if notes:
         audio = whisper.load_audio(str(wav))
         for a, b in _uncovered(notes, segs):
             a, b = max(0.0, a - 1.0), b + 1.0
-            extra = _segs(m.transcribe(audio[int(a * 16000):int(b * 16000)], **kw), a)
-            log(f"lyrics: re-listened {a:.0f}-{b:.0f} s, heard {sum(len(s['words']) for s in extra)} words")
-            segs += extra
+            while a < b - 1:  # long gaps in pieces of <= 20 s
+                e = min(b, a + 20.0)
+                torch.manual_seed(0)
+                extra = _segs(m.transcribe(audio[int(a * 16000):int(e * 16000)], **kw), a)
+                log(f"lyrics: re-listened {a:.0f}-{e:.0f} s, heard {sum(len(s['words']) for s in extra)} words")
+                segs += extra
+                a = e
         segs.sort(key=lambda s: s["t"])
     del m
     if DEVICE == "cuda":
@@ -437,14 +446,24 @@ def transcribe(wav, notes=None):
 def lrclib_search(title):
     import urllib.parse
     import urllib.request
-    q = re.sub(r"\(.*?\)|\[.*?\]|\|.*$|\s[-–—]\s.*$", "", title)
-    q = re.sub(r"\b(piano|karaoke|instrumental|accompaniment|lyrics?|official|video|audio)\b", "", q, flags=re.I)
-    q = re.sub(r"\s+", " ", q).strip()
-    req = urllib.request.Request("https://lrclib.net/api/search?" + urllib.parse.urlencode({"q": q}),
-                                 headers={"User-Agent": "pitch-star-prep"})
-    res = json.load(urllib.request.urlopen(req, timeout=15))
+    # search each part of the title ("Artist - Title | Channel"): the song name can be any part
+    # (2026-11-23: "Dpee - All I Want For Christmas Is My Two Front Teeth.wmv" searched only "Dpee")
+    t = re.sub(r"\.(wmv|mp4|avi|mov|mkv|flv|webm|mp3|m4a|wav)\b", "", title, flags=re.I)
+    t = re.sub(r"\(.*?\)|\[.*?\]", "", t)
+    t = re.sub(r"\b(piano|karaoke|instrumental|accompaniment|lyrics?|official|video|audio)\b", "", t, flags=re.I)
+    # a dash with a space on at least one side separates parts ("DPEE- All I Want..."); "one-horse" doesn't
+    parts = [re.sub(r"\s+", " ", p).strip() for p in re.split(r"\||\s[-–—]|[-–—]\s", t)]
+    queries = list(dict.fromkeys(p for p in parts if len(p) > 3))
     plain = lambda x: [s.strip() for s in (x.get("plainLyrics") or re.sub(r"\[[\d:.]+\]", "", x.get("syncedLyrics") or "")).splitlines() if s.strip()]
-    return [{"name": f"{x['trackName']} – {x['artistName']}", "lines": plain(x)} for x in res if plain(x)]
+    out, seen = [], set()
+    for q in queries[:4]:
+        req = urllib.request.Request("https://lrclib.net/api/search?" + urllib.parse.urlencode({"q": q}),
+                                     headers={"User-Agent": "pitch-star-prep"})
+        for x in json.load(urllib.request.urlopen(req, timeout=15))[:10]:
+            if x["id"] not in seen and plain(x):
+                seen.add(x["id"])
+                out.append({"name": f"{x['trackName']} – {x['artistName']}", "lines": plain(x)})
+    return out
 
 
 def _split_long(text_words, times, max_words=9):
@@ -562,7 +581,7 @@ def _make_lyrics(title, vocals_wav, notes=None):
     except Exception as e:
         log(f"lyrics: transcription failed ({e}); no lyrics shipped")
         return [], {"source": "none", "reason": f"transcription failed: {e}"}
-    heard = sum(len(_words(s["text"])) for s in segs if s["ok"])
+    heard = sum(len(_words(s["text"])) for s in segs)  # the 90% ship gate judges quality
     if heard < 15:
         log("lyrics: too few clear words heard; no lyrics shipped")
         return [], {"source": "none", "reason": "too few words heard", "heard": heard}
@@ -572,7 +591,7 @@ def _make_lyrics(title, vocals_wav, notes=None):
         log(f"lyrics: published-lyrics lookup failed ({e}); using what was heard")
         cands = []
     best = (None, *align_lyrics(segs))  # Whisper only
-    for c in cands[:10]:
+    for c in cands[:40]:
         lines, agree = align_lyrics(segs, c["lines"])
         if agree > best[2]:
             best = (c, lines, agree)

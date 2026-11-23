@@ -37,7 +37,7 @@ Best on the PC in Chrome/Edge (open the game URL), headphones on.
 - On the PC: `tools\trim_song.py "<file.song>" 3:18` (venv python) trims the file itself, audio included.
 
 ## Song list: names and folders
-- Cards show a short name (e.g. "Jingle Bells"). It comes from the published title the lyrics were verified against, otherwise from the video title: the part before the first "|", and in "Artist - Title" the part after the dash, unless that part is only a description such as "Piano accompaniment". The song name is always the bold line (user, 2026-11-22). The rest of the title (artist, source) is shown as subtext.
+- Cards show a short name (e.g. "Jingle Bells"). It comes from the video title when that contains the published title of the verified lyrics, otherwise from the published title, and with no published title from the video title alone: the part before the first "|", and in "Artist - Title" the part after the dash, unless that part is only a description such as "Piano accompaniment". The song name is always the bold line (user, 2026-11-22). The rest of the title (artist, source) is shown as subtext.
 - ✏️ on a card sets your own name and a folder. Type a new folder or pick an existing one; leave it empty to clear. Folders collapse with a tap, and that state is remembered.
 - Name and folder are stored on the phone and kept when an updated pack is re-added (user request, 2026-11-22).
 
@@ -45,6 +45,8 @@ Best on the PC in Chrome/Edge (open the game URL), headphones on.
 - **Every pack's lyrics are verified against the singing before they ship** (user, 2026-11-22: "make sure every lyric pack is verified before shipped"). `prep.bat` transcribes the vocal stem with Whisper (`small`, GPU, ~16 s). That gives the timing. Published lyrics (LRCLIB) only correct a heard line's words when they match it (≥ 60% of words), and only when that version matches ≥ 50% of everything heard. Heard lines a matching version can't confirm are dropped (likely mishearings). With no matching version, the heard lines are used as-is.
 - **Ship gate: > 90% certainty** (user, 2026-11-22: "your lyric validation needs >90% certainty before shipping"). Lyrics ship only if a published version matches ≥ 90% of the heard words **and** the confirmed lines cover ≥ 90% of the sung time (notes inside the heard span of a confirmed line, ±1 s). Otherwise the pack ships with no lyrics, and `lyricsCheck.reason` says why. Heard-only lyrics (no published match) never ship.
 - Whisper can skip a whole sung stretch (Jingle Bells' first verse, 0:09–0:28, was missed behind the intro). Any sung stretch of 2 s or more with no heard word is transcribed again on its own. One heard stretch may match up to 8 published lines.
+- Whisper runs with a fixed seed, so every run gives the same result. Before this, one pack heard 47 words on one run and 0 on the next (2026-11-23). Segments stuck repeating a word ("this, this, this…") are discarded and that stretch is re-listened to in pieces of up to 20 s.
+- The published-lyrics search tries each part of the title. A dash with a space on either side splits the title ("DPEE- All I Want…"), and file extensions like ".wmv" are dropped.
 - Instrumental packs ship no lyrics (nothing sung to check against). Add them by hand with 📝.
 - Each pack records the result in `song.json` → `lyricsCheck` (source, match %, unconfirmed lines).
 - The app never adds lyrics by title on its own; 📝 → **Find** is a manual pick. Lyrics saved in 📝 count as checked by the user (`lyricsCheck.source = manual`).

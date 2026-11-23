@@ -1,8 +1,8 @@
 // ?v= stamps are rewritten by publish.ps1 so every publish loads fresh files past GitHub's CDN cache
-import { readZip, writeZip } from './zip.js?v=202611222357';
-import * as db from './db.js?v=202611222357';
-import { detectPitch } from './pitch.js?v=202611222357';
-import { framesToNotes, placeOctave, toPhrases, noteRange } from './melody.js?v=202611222357';
+import { readZip, writeZip } from './zip.js?v=202611231001';
+import * as db from './db.js?v=202611231001';
+import { detectPitch } from './pitch.js?v=202611231001';
+import { framesToNotes, placeOctave, toPhrases, noteRange } from './melody.js?v=202611231001';
 
 const $ = s => document.querySelector(s);
 const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
@@ -31,17 +31,25 @@ function show(id) { for (const s of document.querySelectorAll('.screen')) s.hidd
 // verified against, else the first part of the video title. The rest of the title becomes subtext.
 const normW = s => s.toLowerCase().replace(/[^a-z0-9 ]+/g, '').replace(/\s+/g, ' ').trim();
 const JUNK = /^(official( music| lyric)? video|lyrics?( video)?|official audio|audio|hd|4k|remastered)$/i;
-const splitTitle = t => t.replace(/\(.*?\)|\[.*?\]/g, '').split(/\s*\|\s*|\s+[-–—]\s+/).map(x => x.trim()).filter(Boolean);
+// a dash with a space on at least one side splits ("DPEE- All I Want…"); "one-horse" doesn't. File
+// extensions in uploaded-video titles (".wmv") are dropped.
+const DASH = /\s[-–—]|[-–—]\s/;
+const cleanT = t => t.replace(/\.(wmv|mp4|avi|mov|mkv|flv|webm|mp3|m4a|wav)\b/ig, '').replace(/\(.*?\)|\[.*?\]/g, '');
+const splitTitle = t => cleanT(t).split(new RegExp(`\\s*\\|\\s*|${DASH.source}`)).map(x => x.trim()).filter(Boolean);
 // words that mark a title part as a description ("Piano accompaniment"), never the song name
 const DESCR = /\b(piano|accompaniment|karaoke|instrumental|cover|lyrics?|version|tutorial|backing track|official|video|audio|remaster(ed)?|live)\b/i;
 function autoName(s) {
-  const pub = s.meta.lyricsCheck?.published?.split(' – ')[0]?.trim();
-  if (pub) return pub;
   // "Title | Channel": the song is before the first "|". Within it, YouTube's usual
   // "Artist - Title" puts the song second, unless that part is only a description.
-  const first = s.title.replace(/\(.*?\)|\[.*?\]/g, '').split('|')[0];
-  const parts = first.split(/\s+[-–—]\s+/).map(x => x.trim()).filter(Boolean);
-  return (parts.length > 1 && !DESCR.test(parts[1]) ? parts[1] : parts[0]) || s.title;
+  const first = cleanT(s.title).split('|')[0];
+  const parts = first.split(DASH).map(x => x.trim()).filter(Boolean);
+  const fromTitle = (parts.length > 1 && !DESCR.test(parts[1]) ? parts[1] : parts[0]) || s.title;
+  // published title of the verified lyrics; the video's wording wins when it contains it
+  // ("(all I want for Christmas is) My two front teeth" vs "All I Want for Christmas is my Two Front Teeth")
+  const pub = s.meta.lyricsCheck?.published?.split(' – ')[0]?.trim();
+  if (!pub) return fromTitle;
+  const core = normW(pub.replace(/\(.*?\)/g, ''));
+  return core && normW(fromTitle).includes(core) ? fromTitle : pub.replace(/[()]/g, '').replace(/\s+/g, ' ').trim();
 }
 const songName = s => s.meta.name || autoName(s);
 function songDesc(s) {
@@ -1008,7 +1016,7 @@ function releaseWake() { wake?.release().catch(() => {}); wake = null; }
 
 // ---------- boot ----------
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
-  navigator.serviceWorker.register('sw.js?v=202611222357', { updateViaCache: 'none' });
+  navigator.serviceWorker.register('sw.js?v=202611231001', { updateViaCache: 'none' });
   // new version installed -> reload once, but never in the middle of a song
   const hadController = !!navigator.serviceWorker.controller;
   navigator.serviceWorker.addEventListener('controllerchange', () => {

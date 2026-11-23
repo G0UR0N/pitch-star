@@ -38,6 +38,14 @@ input[type=text] { font: inherit; background: var(--panel2); color: var(--text);
 .folder:not([open]) > summary::after { transform: rotate(-90deg); }
 .folder > summary small { color: var(--dim); font-weight: 500; background: var(--panel2); border-radius: 10px; padding: 0 8px; }
 .folder > .list { padding: 0 8px 8px; }
+.folderBar { align-items: center; }
+.row.folderBar .btn { flex: 0 0 auto; }
+.folderEmpty { padding: 4px 8px 8px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.chip { align-self: flex-start; margin-top: 6px; border: 1px dashed #8f82b8; background: none; color: var(--text);
+  border-radius: 999px; padding: 3px 10px; font: inherit; font-size: .85rem; cursor: pointer; }
+.card.song .meta { display: flex; flex-direction: column; }
+#fdList .btn { justify-content: flex-start; }
+#fdNew { flex: 1 1 140px; width: auto; }
 #library, #results { overflow-y: auto; }
 h1 { font-size: 1.5rem; margin: 0; } h2 { font-size: 1.1rem; margin: 8px 0 0; color: var(--dim); }
 .top { display: flex; align-items: center; justify-content: space-between; }

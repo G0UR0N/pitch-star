@@ -38,7 +38,12 @@ Best on the PC in Chrome/Edge (open the game URL), headphones on.
 
 ## Song list: names and folders
 - Cards show a short name (e.g. "Jingle Bells"). It comes from the video title when that contains the published title of the verified lyrics, otherwise from the published title, and with no published title from the video title alone: the part before the first "|", and in "Artist - Title" the part after the dash, unless that part is only a description such as "Piano accompaniment". The song name is always the bold line (user, 2026-11-22). The rest of the title (artist, source) is shown as subtext.
-- ✏️ on a card sets your own name and a folder. Type a new folder or pick an existing one; leave it empty to clear. Folders collapse with a tap, and that state is remembered.
+- Folders (genre or anything else; user request 2026-11-23):
+  - A **Christmas** folder is built in. Songs whose title or lyrics mention Christmas words (Christmas, Jingle, Santa, sleigh…) go into it automatically until you choose a folder yourself.
+  - **📁 New folder** at the top of the song list makes a folder. An empty folder shows how to fill it and has **Remove folder**.
+  - The **📁 chip** on each song card ("📁 Christmas", or "📁 Add to folder") moves the song: pick a folder, **No folder**, or create a new one right there.
+  - Folders collapse with a tap, and that state is remembered.
+- ✏️ on a card renames the song.
 - Name and folder are stored on the phone and kept when an updated pack is re-added (user request, 2026-11-22).
 
 ## Lyrics (automatic, verified)

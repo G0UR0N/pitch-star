@@ -1,8 +1,8 @@
 // ?v= stamps are rewritten by publish.ps1 so every publish loads fresh files past GitHub's CDN cache
-import { readZip, writeZip } from './zip.js?v=202611231001';
-import * as db from './db.js?v=202611231001';
-import { detectPitch } from './pitch.js?v=202611231001';
-import { framesToNotes, placeOctave, toPhrases, noteRange } from './melody.js?v=202611231001';
+import { readZip, writeZip } from './zip.js?v=202611231027';
+import * as db from './db.js?v=202611231027';
+import { detectPitch } from './pitch.js?v=202611231027';
+import { framesToNotes, placeOctave, toPhrases, noteRange } from './melody.js?v=202611231027';
 
 const $ = s => document.querySelector(s);
 const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
@@ -73,24 +73,34 @@ async function renderLibrary() {
     list.append(b);
   }
   // folders: songs without one sit on top, then one collapsible group per folder
-  const folders = [...new Set(songs.map(s => s.meta.group).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  const folders = allFolders(songs);
   const boxes = { '': list };
   settings.folderOpen ||= {};
   for (const f of folders) {
+    const n = songs.filter(s => songGroup(s) === f).length;
     const d = document.createElement('details'); d.className = 'folder';
     d.open = settings.folderOpen[f] !== false;
     d.innerHTML = '<summary><span></span><small></small></summary><div class="list"></div>';
     d.querySelector('span').textContent = '📁 ' + f;
-    d.querySelector('small').textContent = songs.filter(s => s.meta.group === f).length;
+    d.querySelector('small').textContent = n;
     d.ontoggle = () => { settings.folderOpen[f] = d.open; saveSettings(); };
+    if (!n) {
+      const e = document.createElement('div'); e.className = 'hint folderEmpty';
+      e.innerHTML = 'Empty. Tap <b>📁</b> on a song to move it here. <button type="button" class="btn small">Remove folder</button>';
+      e.querySelector('button').onclick = () => {
+        settings.folders = (settings.folders || []).filter(x => x !== f);
+        (settings.hiddenFolders ||= []).push(f); saveSettings(); renderLibrary();
+      };
+      d.querySelector('.list').append(e);
+    }
     list.append(d); boxes[f] = d.querySelector('.list');
   }
   for (const s of songs) {
     const el = document.createElement('div'); el.className = 'card song';
-    el.innerHTML = `<div class="meta"><b></b><small class="desc"></small><small>${fmtTime(s.meta.duration)} · ${s.meta.phrases.length} sections${best[s.id] != null ? ` · best ${best[s.id]}` : ''}${s.meta.edited ? ' · ✎ own melody' : ''}</small>${s.meta.lyricsCheck?.stale ? '<button class="btn small warn" data-a="readd">⚠ Lyrics need an update: tap, then pick this song from Drive</button>' : ''}</div>
+    el.innerHTML = `<div class="meta"><b></b><small class="desc"></small><small>${fmtTime(s.meta.duration)} · ${s.meta.phrases.length} sections${best[s.id] != null ? ` · best ${best[s.id]}` : ''}${s.meta.edited ? ' · ✎ own melody' : ''}</small><button class="chip" data-a="folder"></button>${s.meta.lyricsCheck?.stale ? '<button class="btn small warn" data-a="readd">⚠ Lyrics need an update: tap, then pick this song from Drive</button>' : ''}</div>
       <div class="actions">
         <button class="btn primary small" data-a="sing">▶ Sing</button>
-        <button class="icon" data-a="edit" title="Name & folder" aria-label="Name and folder">✏️</button>
+        <button class="icon" data-a="edit" title="Rename" aria-label="Rename">✏️</button>
         <button class="icon" data-a="ly" title="Lyrics" aria-label="Lyrics">📝</button>
         <button class="icon" data-a="rec" title="Record melody" aria-label="Record melody">🎙️</button>
         <button class="icon" data-a="trim" title="Trim song end" aria-label="Trim">✂️</button>
@@ -101,6 +111,9 @@ async function renderLibrary() {
     const desc = songDesc(s), dEl = el.querySelector('.desc');
     if (desc) dEl.textContent = desc; else dEl.remove();
     el.querySelector('[data-a=readd]')?.addEventListener('click', () => $('#importInput').click());
+    const g = songGroup(s), fb = el.querySelector('[data-a=folder]');
+    fb.textContent = g ? `📁 ${g}` : '📁 Add to folder';
+    fb.onclick = () => openFolderDlg(s);
     el.querySelector('[data-a=sing]').onclick = () => openSong(s.id);
     el.querySelector('[data-a=edit]').onclick = () => editSong(s);
     el.querySelector('[data-a=rec]').onclick = () => openSong(s.id, { record: true });
@@ -110,33 +123,73 @@ async function renderLibrary() {
     el.querySelector('[data-a=del]').onclick = async () => {
       if (confirm(`Remove "${songName(s)}"?`)) { await db.deleteSong(s.id); renderLibrary(); }
     };
-    boxes[s.meta.group || ''].append(el);
+    boxes[songGroup(s) || ''].append(el);
   }
   // keep folders after the loose songs
   for (const f of folders) list.append(boxes[f].parentElement);
 }
 
-// name & folder dialog
+// ---------- folders (user request 2026-11-23: groups by genre or any custom folder; a Christmas
+// folder out of the box; making a folder must be obvious) ----------
+// meta.group: a folder name, '' = the user chose "no folder", missing = automatic.
+// Automatic: Christmas songs (by title, verified title or lyrics) go into "Christmas".
+const XMAS = /\b(christmas|xmas|jingle|santa|sleigh|reindeer|rudolph|noel|nativity|mistletoe|grinch|frosty|silent night|holly)\b/i;
+const autoGroup = s => XMAS.test([s.title, s.meta.name, s.meta.lyricsCheck?.published, ...(s.meta.lyrics || []).map(l => l.text)].join(' ')) ? 'Christmas' : '';
+const songGroup = s => (s.meta.group !== undefined ? s.meta.group : autoGroup(s));
+function allFolders(songs) {
+  const hidden = settings.hiddenFolders || [];
+  const fs = new Set([...(settings.folders || []), ...(hidden.includes('Christmas') ? [] : ['Christmas'])]);
+  songs.forEach(s => songGroup(s) && fs.add(songGroup(s)));
+  return [...fs].sort((a, b) => a.localeCompare(b));
+}
+let folderSongId = null;
+async function openFolderDlg(s) {
+  folderSongId = s?.id ?? null;
+  $('#fdTitle').textContent = s ? 'Put in a folder' : 'New folder';
+  $('#fdSong').textContent = s ? songName(s) : 'Name the folder, then tap 📁 on any song to move it in.';
+  const box = $('#fdList'); box.innerHTML = '';
+  if (s) {
+    const cur = songGroup(s);
+    for (const f of [...allFolders(await db.allSongs()), '']) {
+      const b = document.createElement('button'); b.type = 'button';
+      b.className = 'btn' + (f === cur ? ' primary' : '');
+      b.textContent = f ? `📁 ${f}` : 'No folder';
+      b.onclick = () => setFolder(f);
+      box.append(b);
+    }
+  }
+  $('#fdNew').value = '';
+  $('#folderDlg').showModal();
+}
+async function setFolder(f) {
+  if (folderSongId) { const s = await db.getSong(folderSongId); s.meta.group = f; await db.putSong(s); }
+  $('#folderDlg').close(); renderLibrary();
+}
+$('#btnFdNew').onclick = async () => {
+  const f = $('#fdNew').value.trim().replace(/\s+/g, ' ');
+  if (!f) { $('#fdNew').focus(); return; }
+  settings.folders = [...new Set([...(settings.folders || []), f])];
+  settings.hiddenFolders = (settings.hiddenFolders || []).filter(x => x !== f);
+  settings.folderOpen ||= {}; settings.folderOpen[f] = true; saveSettings();
+  if (folderSongId) await setFolder(f);
+  else { $('#folderDlg').close(); renderLibrary(); toast(`Folder "${f}" made. Tap 📁 on a song to move it in.`, 4000); }
+};
+$('#fdNew').onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); $('#btnFdNew').click(); } };
+$('#btnNewFolder').onclick = () => openFolderDlg(null);
+
+// rename dialog
 let editId = null;
 function editSong(s) {
   editId = s.id;
   $('#edName').value = s.meta.name || '';
   $('#edName').placeholder = autoName(s);
-  $('#edGroup').value = s.meta.group || '';
   $('#edFull').textContent = s.title;
-  db.allSongs().then(all => {
-    $('#folderList').innerHTML = '';
-    for (const f of [...new Set(all.map(x => x.meta.group).filter(Boolean))].sort()) {
-      const o = document.createElement('option'); o.value = f; $('#folderList').append(o);
-    }
-  });
   $('#editDlg').showModal();
 }
 $('#btnEdSave').onclick = async () => {
   const s = await db.getSong(editId);
-  const name = $('#edName').value.trim(), group = $('#edGroup').value.trim();
+  const name = $('#edName').value.trim();
   if (name) s.meta.name = name; else delete s.meta.name;
-  if (group) s.meta.group = group; else delete s.meta.group;
   await db.putSong(s);
   $('#editDlg').close(); renderLibrary();
 };
@@ -147,7 +200,7 @@ async function importPack(buf, fname) {
   const id = (fname || meta.title).replace(/\.song$/i, '');
   // re-adding an updated pack keeps the name and folder chosen on this phone
   const old = await db.getSong(id);
-  for (const k of ['name', 'group']) if (old?.meta?.[k] && !meta[k]) meta[k] = old.meta[k];
+  for (const k of ['name', 'group']) if (old?.meta?.[k] !== undefined && meta[k] === undefined) meta[k] = old.meta[k]; // '' (no folder) is kept too
   dropUnverified(meta); // an old pack file still carries unverified lyrics
   await db.putSong({
     id, title: meta.title, meta,
@@ -1016,7 +1069,7 @@ function releaseWake() { wake?.release().catch(() => {}); wake = null; }
 
 // ---------- boot ----------
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
-  navigator.serviceWorker.register('sw.js?v=202611231001', { updateViaCache: 'none' });
+  navigator.serviceWorker.register('sw.js?v=202611231027', { updateViaCache: 'none' });
   // new version installed -> reload once, but never in the middle of a song
   const hadController = !!navigator.serviceWorker.controller;
   navigator.serviceWorker.addEventListener('controllerchange', () => {

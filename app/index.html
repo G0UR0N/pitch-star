@@ -9,7 +9,7 @@
 <link rel="icon" href="icon.svg">
 <link rel="apple-touch-icon" href="icon-192.png">
 <title>Pitch Star</title>
-<link rel="stylesheet" href="style.css?v=202611222101">
+<link rel="stylesheet" href="style.css?v=202611222113">
 </head>
 <body>
 
@@ -119,7 +119,25 @@
   </form>
 </dialog>
 
+<dialog id="editDlg">
+  <form method="dialog">
+    <h2>Name &amp; folder</h2>
+    <label>Name <small class="hint">(empty = automatic)</small>
+      <input id="edName" type="text" autocomplete="off">
+    </label>
+    <label>Folder <small class="hint">(pick one or type a new one; empty = no folder)</small>
+      <input id="edGroup" type="text" list="folderList" autocomplete="off" placeholder="e.g. Christmas">
+      <datalist id="folderList"></datalist>
+    </label>
+    <p class="hint">Full title: <span id="edFull"></span></p>
+    <div class="row">
+      <button type="button" id="btnEdSave" class="btn primary">Save</button>
+      <button class="btn">Close</button>
+    </div>
+  </form>
+</dialog>
+
 <div id="toast" class="toast" hidden></div>
-<script type="module" src="app.js?v=202611222101"></script>
+<script type="module" src="app.js?v=202611222113"></script>
 </body>
 </html>

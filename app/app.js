@@ -1,8 +1,8 @@
 // ?v= stamps are rewritten by publish.ps1 so every publish loads fresh files past GitHub's CDN cache
-import { readZip, writeZip } from './zip.js?v=202611222101';
-import * as db from './db.js?v=202611222101';
-import { detectPitch } from './pitch.js?v=202611222101';
-import { framesToNotes, placeOctave, toPhrases, noteRange } from './melody.js?v=202611222101';
+import { readZip, writeZip } from './zip.js?v=202611222113';
+import * as db from './db.js?v=202611222113';
+import { detectPitch } from './pitch.js?v=202611222113';
+import { framesToNotes, placeOctave, toPhrases, noteRange } from './melody.js?v=202611222113';
 
 const $ = s => document.querySelector(s);
 const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
@@ -27,40 +27,104 @@ function toast(msg, ms = 2500) {
 function show(id) { for (const s of document.querySelectorAll('.screen')) s.hidden = s.id !== id; }
 
 // ---------- library ----------
+// Short song name ("Jingle Bells"): the user's own name, else the published title the lyrics were
+// verified against, else the first part of the video title. The rest of the title becomes subtext.
+const normW = s => s.toLowerCase().replace(/[^a-z0-9 ]+/g, '').replace(/\s+/g, ' ').trim();
+const JUNK = /^(official( music| lyric)? video|lyrics?( video)?|official audio|audio|hd|4k|remastered)$/i;
+const splitTitle = t => t.replace(/\(.*?\)|\[.*?\]/g, '').split(/\s*\|\s*|\s+[-–—]\s+/).map(x => x.trim()).filter(Boolean);
+function autoName(s) {
+  const pub = s.meta.lyricsCheck?.published?.split(' – ')[0]?.trim();
+  return pub || splitTitle(s.title)[0] || s.title;
+}
+const songName = s => s.meta.name || autoName(s);
+function songDesc(s) {
+  const t = s.title, n = normW(songName(s)), parts = [];
+  for (const m of t.matchAll(/\((.*?)\)|\[(.*?)\]/g)) parts.push(m[1] ?? m[2]);
+  parts.push(...splitTitle(t));
+  return [...new Set(parts.map(x => x.trim()).filter(x => x && !JUNK.test(x) && normW(x) !== n))].join(' · ');
+}
+
 async function renderLibrary() {
   const [songs, scores] = await Promise.all([db.allSongs(), db.allScores()]);
   const best = Object.fromEntries(scores.map(s => [s.id, s.best]));
   const list = $('#songList'); list.innerHTML = '';
   if (!songs.length) list.innerHTML = '<div class="empty">No songs yet. Tap <b>Add songs</b>.</div>';
-  songs.sort((a, b) => a.title.localeCompare(b.title));
+  songs.sort((a, b) => songName(a).localeCompare(songName(b)));
+  // folders: songs without one sit on top, then one collapsible group per folder
+  const folders = [...new Set(songs.map(s => s.meta.group).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  const boxes = { '': list };
+  settings.folderOpen ||= {};
+  for (const f of folders) {
+    const d = document.createElement('details'); d.className = 'folder';
+    d.open = settings.folderOpen[f] !== false;
+    d.innerHTML = '<summary><span></span><small></small></summary><div class="list"></div>';
+    d.querySelector('span').textContent = '📁 ' + f;
+    d.querySelector('small').textContent = songs.filter(s => s.meta.group === f).length;
+    d.ontoggle = () => { settings.folderOpen[f] = d.open; saveSettings(); };
+    list.append(d); boxes[f] = d.querySelector('.list');
+  }
   for (const s of songs) {
     const el = document.createElement('div'); el.className = 'card song';
-    el.innerHTML = `<div class="meta"><b></b><small>${fmtTime(s.meta.duration)} · ${s.meta.phrases.length} sections${best[s.id] != null ? ` · best ${best[s.id]}` : ''}</small></div>
+    el.innerHTML = `<div class="meta"><b></b><small class="desc"></small><small>${fmtTime(s.meta.duration)} · ${s.meta.phrases.length} sections${best[s.id] != null ? ` · best ${best[s.id]}` : ''}${s.meta.edited ? ' · ✎ own melody' : ''}</small></div>
       <div class="actions">
         <button class="btn primary small" data-a="sing">▶ Sing</button>
+        <button class="icon" data-a="edit" title="Name & folder" aria-label="Name and folder">✏️</button>
         <button class="icon" data-a="ly" title="Lyrics" aria-label="Lyrics">📝</button>
         <button class="icon" data-a="rec" title="Record melody" aria-label="Record melody">🎙️</button>
         <button class="icon" data-a="trim" title="Trim song end" aria-label="Trim">✂️</button>
         <button class="icon" data-a="exp" title="Export song file" aria-label="Export">⤓</button>
         <button class="icon" data-a="del" title="Remove" aria-label="Delete">🗑️</button>
       </div>`;
-    el.querySelector('b').textContent = s.title + (s.meta.edited ? ' ✎' : '');
+    el.querySelector('b').textContent = songName(s);
+    const desc = songDesc(s), dEl = el.querySelector('.desc');
+    if (desc) dEl.textContent = desc; else dEl.remove();
     el.querySelector('[data-a=sing]').onclick = () => openSong(s.id);
+    el.querySelector('[data-a=edit]').onclick = () => editSong(s);
     el.querySelector('[data-a=rec]').onclick = () => openSong(s.id, { record: true });
     el.querySelector('[data-a=ly]').onclick = () => openLyrics(s.id);
     el.querySelector('[data-a=exp]').onclick = () => exportSong(s.id);
     el.querySelector('[data-a=trim]').onclick = () => trimSong(s.id);
     el.querySelector('[data-a=del]').onclick = async () => {
-      if (confirm(`Remove "${s.title}"?`)) { await db.deleteSong(s.id); renderLibrary(); }
+      if (confirm(`Remove "${songName(s)}"?`)) { await db.deleteSong(s.id); renderLibrary(); }
     };
-    list.append(el);
+    boxes[s.meta.group || ''].append(el);
   }
+  // keep folders after the loose songs
+  for (const f of folders) list.append(boxes[f].parentElement);
 }
+
+// name & folder dialog
+let editId = null;
+function editSong(s) {
+  editId = s.id;
+  $('#edName').value = s.meta.name || '';
+  $('#edName').placeholder = autoName(s);
+  $('#edGroup').value = s.meta.group || '';
+  $('#edFull').textContent = s.title;
+  db.allSongs().then(all => {
+    $('#folderList').innerHTML = '';
+    for (const f of [...new Set(all.map(x => x.meta.group).filter(Boolean))].sort()) {
+      const o = document.createElement('option'); o.value = f; $('#folderList').append(o);
+    }
+  });
+  $('#editDlg').showModal();
+}
+$('#btnEdSave').onclick = async () => {
+  const s = await db.getSong(editId);
+  const name = $('#edName').value.trim(), group = $('#edGroup').value.trim();
+  if (name) s.meta.name = name; else delete s.meta.name;
+  if (group) s.meta.group = group; else delete s.meta.group;
+  await db.putSong(s);
+  $('#editDlg').close(); renderLibrary();
+};
 
 async function importPack(buf, fname) {
   const z = await readZip(buf);
   const meta = JSON.parse(new TextDecoder().decode(z['song.json']));
   const id = (fname || meta.title).replace(/\.song$/i, '');
+  // re-adding an updated pack keeps the name and folder chosen on this phone
+  const old = await db.getSong(id);
+  for (const k of ['name', 'group']) if (old?.meta?.[k] && !meta[k]) meta[k] = old.meta[k];
   await db.putSong({
     id, title: meta.title, meta,
     backing: new Blob([z['backing.mp3']], { type: 'audio/mpeg' }),
@@ -185,7 +249,7 @@ async function openSong(id, opts = {}) {
   buildLyrics();
   resetStats();
   backing.onended = () => { if (S && S.mode === 'song') finishSong(); };
-  $('#playTitle').textContent = song.title;
+  $('#playTitle').textContent = songName(song);
   $('#guideVol').value = settings.guide;
   $('#speedSel').value = '1';
   $('#btnPlay').textContent = '▶ Start';
@@ -501,7 +565,7 @@ async function finishSong() {
 }
 async function showResults(id, res) {
   const song = await db.getSong(id);
-  $('#resTitle').textContent = song.title;
+  $('#resTitle').textContent = songName(song);
   const stars = res.total >= 90 ? 5 : res.total >= 80 ? 4 : res.total >= 65 ? 3 : res.total >= 50 ? 2 : 1;
   $('#resStars').textContent = '★'.repeat(stars) + '☆'.repeat(5 - stars);
   $('#resScore').textContent = res.total;
@@ -666,7 +730,7 @@ $('#btnRecKeep').onclick = async () => {
 // ---------- trim: end the song early (drops notes/sections/lyrics after it) ----------
 async function trimSong(id) {
   const s = await db.getSong(id), cur = fmtTime(s.meta.duration);
-  const v = prompt(`End "${s.title}" at (m:ss)? Now ends at ${cur}.`, cur);
+  const v = prompt(`End "${songName(s)}" at (m:ss)? Now ends at ${cur}.`, cur);
   if (!v) return;
   const m = v.trim().match(/^(\d+):(\d{1,2})$/);
   if (!m) { toast('Use m:ss, like 3:18'); return; }
@@ -927,7 +991,7 @@ function releaseWake() { wake?.release().catch(() => {}); wake = null; }
 
 // ---------- boot ----------
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
-  navigator.serviceWorker.register('sw.js?v=202611222101', { updateViaCache: 'none' });
+  navigator.serviceWorker.register('sw.js?v=202611222113', { updateViaCache: 'none' });
   // new version installed -> reload once, but never in the middle of a song
   const hadController = !!navigator.serviceWorker.controller;
   navigator.serviceWorker.addEventListener('controllerchange', () => {

@@ -28,6 +28,7 @@ input[type=search] { flex: 1 1 160px; width: auto; }
 .card.song .meta b { font-size: 1.15rem; }
 .card.song .meta small { display: block; }
 .card.song .meta small.desc { color: #cfc3ef; }
+.btn.warn { background: #6b4a12; color: var(--gold); margin-top: 6px; font-size: .9rem; text-align: left; }
 input[type=text] { font: inherit; background: var(--panel2); color: var(--text); border: 0; border-radius: 10px; padding: 8px; width: 100%; }
 /* folders */
 .folder { background: #ffffff08; border-radius: 16px; }

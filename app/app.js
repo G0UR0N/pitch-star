@@ -1,8 +1,8 @@
 // ?v= stamps are rewritten by publish.ps1 so every publish loads fresh files past GitHub's CDN cache
-import { readZip, writeZip } from './zip.js?v=202611222200';
-import * as db from './db.js?v=202611222200';
-import { detectPitch } from './pitch.js?v=202611222200';
-import { framesToNotes, placeOctave, toPhrases, noteRange } from './melody.js?v=202611222200';
+import { readZip, writeZip } from './zip.js?v=202611222342';
+import * as db from './db.js?v=202611222342';
+import { detectPitch } from './pitch.js?v=202611222342';
+import { framesToNotes, placeOctave, toPhrases, noteRange } from './melody.js?v=202611222342';
 
 const $ = s => document.querySelector(s);
 const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
@@ -57,6 +57,13 @@ async function renderLibrary() {
   const list = $('#songList'); list.innerHTML = '';
   if (!songs.length) list.innerHTML = '<div class="empty">No songs yet. Tap <b>Add songs</b>.</div>';
   songs.sort((a, b) => songName(a).localeCompare(songName(b)));
+  const stale = songs.filter(s => s.meta.lyricsCheck?.stale);
+  if (stale.length) {
+    const b = document.createElement('button'); b.className = 'btn warn wide';
+    b.textContent = `⚠ Lyrics need an update for: ${stale.map(songName).join(', ')}. Tap here and pick ${stale.length > 1 ? 'them' : 'it'} from Drive → PitchStar.`;
+    b.onclick = () => $('#importInput').click();
+    list.append(b);
+  }
   // folders: songs without one sit on top, then one collapsible group per folder
   const folders = [...new Set(songs.map(s => s.meta.group).filter(Boolean))].sort((a, b) => a.localeCompare(b));
   const boxes = { '': list };
@@ -72,7 +79,7 @@ async function renderLibrary() {
   }
   for (const s of songs) {
     const el = document.createElement('div'); el.className = 'card song';
-    el.innerHTML = `<div class="meta"><b></b><small class="desc"></small><small>${fmtTime(s.meta.duration)} · ${s.meta.phrases.length} sections${best[s.id] != null ? ` · best ${best[s.id]}` : ''}${s.meta.edited ? ' · ✎ own melody' : ''}${s.meta.lyricsCheck?.stale ? ' · ⚠ re-add from Drive for lyrics' : ''}</small></div>
+    el.innerHTML = `<div class="meta"><b></b><small class="desc"></small><small>${fmtTime(s.meta.duration)} · ${s.meta.phrases.length} sections${best[s.id] != null ? ` · best ${best[s.id]}` : ''}${s.meta.edited ? ' · ✎ own melody' : ''}</small>${s.meta.lyricsCheck?.stale ? '<button class="btn small warn" data-a="readd">⚠ Lyrics need an update: tap, then pick this song from Drive</button>' : ''}</div>
       <div class="actions">
         <button class="btn primary small" data-a="sing">▶ Sing</button>
         <button class="icon" data-a="edit" title="Name & folder" aria-label="Name and folder">✏️</button>
@@ -85,6 +92,7 @@ async function renderLibrary() {
     el.querySelector('b').textContent = songName(s);
     const desc = songDesc(s), dEl = el.querySelector('.desc');
     if (desc) dEl.textContent = desc; else dEl.remove();
+    el.querySelector('[data-a=readd]')?.addEventListener('click', () => $('#importInput').click());
     el.querySelector('[data-a=sing]').onclick = () => openSong(s.id);
     el.querySelector('[data-a=edit]').onclick = () => editSong(s);
     el.querySelector('[data-a=rec]').onclick = () => openSong(s.id, { record: true });
@@ -265,7 +273,7 @@ async function openSong(id, opts = {}) {
   if (opts.sync) startSync();
   else if (opts.record) startRecord();
   else if (opts.practice) startPractice(opts.practice);
-  else { S.mode = 'song'; $('#practicePanel').hidden = true; $('#playSub').textContent = 'Full song'; seek(0); }
+  else { S.mode = 'song'; $('#practicePanel').hidden = true; $('#playSub').textContent = m.lyricsCheck?.stale ? 'Full song · no lyrics until re-added from Drive' : 'Full song'; seek(0); }
   show('play'); resize();
   requestAnimationFrame(tick);
 }
@@ -1000,7 +1008,7 @@ function releaseWake() { wake?.release().catch(() => {}); wake = null; }
 
 // ---------- boot ----------
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
-  navigator.serviceWorker.register('sw.js?v=202611222200', { updateViaCache: 'none' });
+  navigator.serviceWorker.register('sw.js?v=202611222342', { updateViaCache: 'none' });
   // new version installed -> reload once, but never in the middle of a song
   const hadController = !!navigator.serviceWorker.controller;
   navigator.serviceWorker.addEventListener('controllerchange', () => {

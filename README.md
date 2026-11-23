@@ -36,6 +36,11 @@ Best on the PC in Chrome/Edge (open the game URL), headphones on.
 - In the app: ✂️ on the song → type the new end (m:ss). Export (⤓) to keep it in Drive.
 - On the PC: `tools\trim_song.py "<file.song>" 3:18` (venv python) trims the file itself, audio included.
 
+## Song list: names and folders
+- Cards show a short name (e.g. "Jingle Bells"). It comes from the published title the lyrics were verified against, otherwise from the first part of the video title. The rest of the title (artist, source) is shown as subtext.
+- ✏️ on a card sets your own name and a folder. Type a new folder or pick an existing one; leave it empty to clear. Folders collapse with a tap, and that state is remembered.
+- Name and folder are stored on the phone and kept when an updated pack is re-added (user request, 2026-11-22).
+
 ## Lyrics (automatic, verified)
 - **Every pack's lyrics are verified against the singing before they ship** (user, 2026-11-22: "make sure every lyric pack is verified before shipped"). `prep.bat` transcribes the vocal stem with Whisper (`small`, GPU, ~16 s). That gives the timing. Published lyrics (LRCLIB) only correct a heard line's words when they match it (≥ 60% of words), and only when that version matches ≥ 50% of everything heard. Heard lines a matching version can't confirm are dropped (likely mishearings). With no matching version, the heard lines are used as-is.
 - Instrumental packs ship no lyrics (nothing sung to check against). Add them by hand with 📝.

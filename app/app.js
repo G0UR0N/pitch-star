@@ -1,8 +1,8 @@
 // ?v= stamps are rewritten by publish.ps1 so every publish loads fresh files past GitHub's CDN cache
-import { readZip, writeZip } from './zip.js?v=202611221904';
-import * as db from './db.js?v=202611221904';
-import { detectPitch } from './pitch.js?v=202611221904';
-import { framesToNotes, placeOctave, toPhrases, noteRange } from './melody.js?v=202611221904';
+import { readZip, writeZip } from './zip.js?v=202611222101';
+import * as db from './db.js?v=202611222101';
+import { detectPitch } from './pitch.js?v=202611222101';
+import { framesToNotes, placeOctave, toPhrases, noteRange } from './melody.js?v=202611222101';
 
 const $ = s => document.querySelector(s);
 const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
@@ -725,17 +725,11 @@ function lyricsFrom(x, duration) {
   const text = x.plainLyrics || parseLrc(x.syncedLyrics).map(l => l.text).join('\n');
   return { lines: text.split('\n').map(s => s.trim()).filter(Boolean).map(text => ({ t: null, text })), timed: false };
 }
+// Lyrics are never auto-added by title on the phone: a title match can be a different song
+// (2026-11-22). Packs carry lyrics verified against the singing at prep time; anything else
+// is picked by hand in the 📝 dialog.
 async function autoLyrics(id) {
-  const s = await db.getSong(id);
-  if (!s || s.meta.lyrics?.length || s.meta.lyricsTried) return s;
-  s.meta.lyricsTried = true;
-  try {
-    const res = await searchLyrics(cleanTitle(s.title));
-    const best = res.find(x => x.syncedLyrics && Math.abs(x.duration - s.meta.duration) < 4) || res[0];
-    if (best) s.meta.lyrics = lyricsFrom(best, s.meta.duration).lines;
-  } catch { s.meta.lyricsTried = false; } // offline: try again another time
-  await db.putSong(s);
-  return s;
+  return db.getSong(id);
 }
 
 let lyId = null, lyTimes = null;
@@ -933,7 +927,7 @@ function releaseWake() { wake?.release().catch(() => {}); wake = null; }
 
 // ---------- boot ----------
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
-  navigator.serviceWorker.register('sw.js?v=202611221904', { updateViaCache: 'none' });
+  navigator.serviceWorker.register('sw.js?v=202611222101', { updateViaCache: 'none' });
   // new version installed -> reload once, but never in the middle of a song
   const hadController = !!navigator.serviceWorker.controller;
   navigator.serviceWorker.addEventListener('controllerchange', () => {

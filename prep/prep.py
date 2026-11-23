@@ -366,57 +366,165 @@ def parse_lrc(s):
     return out
 
 
-def timing_fit(lines, notes):
-    """How well lyric line starts land on sung phrase starts (notes that follow a breath),
-    minus how well the same lines do when shifted 1.5 s (chance level for dense songs)."""
-    if not lines or not notes:
-        return 0.0
-    on = np.array([n["t"] for i, n in enumerate(notes)
-                   if i == 0 or n["t"] - (notes[i - 1]["t"] + notes[i - 1]["d"]) > 0.2])
-    if not len(on):
-        return 0.0
-    hit = lambda off: float(np.mean([np.min(np.abs(on - (l["t"] + off))) < 0.5 for l in lines]))
-    return hit(0.0) - max(hit(1.5), hit(-1.5))
+# Lyrics are VERIFIED against the actual singing before they ship: Whisper transcribes the
+# vocal stem (what is really sung, with timings); published lyrics (LRCLIB) are only used to
+# correct Whisper's spelling where a line clearly matches what was heard. A title match alone
+# never ships lyrics (2026-11-22: "Jingle Bells" matched a different song's words).
+LYRIC_MATCH = 0.6    # a heard line must match a published line this well to take its text
+LYRIC_AGREE = 0.5    # share of heard words a published version must match to be used at all
 
 
-def fetch_lyrics(title, duration, notes=None, n_sections=0):
+_NUM = dict(enumerate("zero one two three four five six seven eight nine ten eleven twelve".split()))
+
+
+def _words(s):
+    ws = re.sub(r"[^a-z0-9' ]+", " ", s.lower().replace("-", " ")).replace("'", "").split()
+    return [_NUM.get(int(w), w) if w.isdigit() else w for w in ws]
+
+
+def transcribe(wav):
+    """[{t, text, words:[{t, w}], ok}] from Whisper; ok=False marks low-confidence segments."""
+    import whisper
+    m = whisper.load_model("small", device=DEVICE, download_root=str(TOOLS / "models" / "whisper"))
+    r = m.transcribe(str(wav), language="en", word_timestamps=True, condition_on_previous_text=False, verbose=None)
+    del m
+    if DEVICE == "cuda":
+        torch.cuda.empty_cache()
+    segs = []
+    for s in r["segments"]:
+        ws = [{"t": round(w["start"], 2), "w": w["word"].strip()} for w in s.get("words", []) if w["word"].strip()]
+        if ws:
+            segs.append({"t": ws[0]["t"], "text": s["text"].strip(), "words": ws,
+                         "ok": s["avg_logprob"] > -0.8 and s["no_speech_prob"] < 0.6 and s["compression_ratio"] < 2.4})
+    return segs
+
+
+def lrclib_search(title):
     import urllib.parse
     import urllib.request
-
     q = re.sub(r"\(.*?\)|\[.*?\]|\|.*$|\s[-–—]\s.*$", "", title)
     q = re.sub(r"\b(piano|karaoke|instrumental|accompaniment|lyrics?|official|video|audio)\b", "", q, flags=re.I)
     q = re.sub(r"\s+", " ", q).strip()
+    req = urllib.request.Request("https://lrclib.net/api/search?" + urllib.parse.urlencode({"q": q}),
+                                 headers={"User-Agent": "pitch-star-prep"})
+    res = json.load(urllib.request.urlopen(req, timeout=15))
+    plain = lambda x: [s.strip() for s in (x.get("plainLyrics") or re.sub(r"\[[\d:.]+\]", "", x.get("syncedLyrics") or "")).splitlines() if s.strip()]
+    return [{"name": f"{x['trackName']} – {x['artistName']}", "lines": plain(x)} for x in res if plain(x)]
+
+
+def _split_long(text_words, times, max_words=9):
+    """Break a long heard segment into display lines at its biggest pauses."""
+    if len(text_words) <= max_words:
+        return [(times[0], " ".join(text_words))]
+    gaps = [times[i + 1] - times[i] for i in range(len(times) - 1)]
+    mid = len(text_words) // 2
+    j = max(range(max(1, mid - 3), min(len(text_words) - 1, mid + 4)), key=lambda i: gaps[i - 1]) if len(text_words) > 2 else 1
+    return _split_long(text_words[:j], times[:j], max_words) + _split_long(text_words[j:], times[j:], max_words)
+
+
+def align_lyrics(segs, cand=None):
+    """Heard segments -> timed display lines. With a published version, each segment takes the
+    1-3 consecutive published lines that best match it (if >= LYRIC_MATCH). Returns
+    (lines, share of heard words that matched)."""
+    from difflib import SequenceMatcher
+    lines, matched, total, dropped = [], 0, 0, []
+    align_lyrics.dropped = dropped
+    pub = [(l, _words(l)) for l in (cand or [])]
+
+    def flat_of(s):
+        flat, owner = [], []
+        for k, w in enumerate(s["words"]):
+            ws = _words(w["w"]); flat += ws; owner += [k] * len(ws)
+        return flat, owner
+
+    def best_win(flat):
+        best = (0.0, None)
+        for i in range(len(pub)):
+            for n in (1, 2, 3):
+                win = pub[i:i + n]
+                if len(win) < n:
+                    break
+                r = SequenceMatcher(None, flat, [w for _, x in win for w in x], autojunk=False).ratio()
+                if r > best[0]:
+                    best = (r, win)
+        return best
+
+    # Whisper sometimes splits one sung line in two: join neighbours when together they match better
+    segs = [dict(s) for s in segs]
+    if pub:
+        k = 0
+        while k + 1 < len(segs):
+            a, b = segs[k], segs[k + 1]
+            if b["t"] - a["words"][-1]["t"] < 1.5:
+                ab = {"t": a["t"], "text": f"{a['text']} {b['text']}", "words": a["words"] + b["words"], "ok": a["ok"] and b["ok"]}
+                if best_win(flat_of(ab)[0])[0] > max(best_win(flat_of(a)[0])[0], best_win(flat_of(b)[0])[0]):
+                    segs[k:k + 2] = [ab]; continue
+            k += 1
+
+    for s in segs:
+        flat, owner = flat_of(s)
+        if not flat:
+            continue
+        total += len(flat)
+        best = best_win(flat)
+        if best[1] and best[0] >= LYRIC_MATCH:
+            matched += len(flat)
+            win = best[1]
+            sm = SequenceMatcher(None, flat, [w for _, x in win for w in x], autojunk=False)
+            pos = 0
+            for text, ws in win:
+                # time of this published line = heard word aligned to its first word
+                t = None
+                for a, b, n in sm.get_matching_blocks():
+                    if n and b <= pos < b + n:
+                        t = s["words"][owner[a + pos - b]]["t"]; break
+                    if n and b > pos and t is None:
+                        t = s["words"][owner[a]]["t"]; break
+                lines.append({"t": t if t is not None else s["t"], "text": text})
+                pos += len(ws)
+        elif cand:  # published version in use: a heard line it can't confirm is likely misheard
+            dropped.append(f"{s['t']:.1f} {s['text']}")
+        elif s["ok"]:
+            for t, text in _split_long([w["w"] for w in s["words"]], [w["t"] for w in s["words"]]):
+                lines.append({"t": t, "text": text})
+    for i in range(1, len(lines)):  # keep times increasing
+        lines[i]["t"] = round(max(lines[i]["t"], lines[i - 1]["t"] + 0.05), 2)
+    return lines, (matched / total if total else 0.0)
+
+
+def make_lyrics(title, vocals_wav):
+    """Verified lyrics for a sung recording: (lines, check-info). Never raises."""
     try:
-        req = urllib.request.Request("https://lrclib.net/api/search?" + urllib.parse.urlencode({"q": q}),
-                                     headers={"User-Agent": "pitch-star-prep"})
-        res = [x for x in json.load(urllib.request.urlopen(req, timeout=15)) if x.get("plainLyrics") or x.get("syncedLyrics")]
+        segs = transcribe(vocals_wav)
     except Exception as e:
-        log(f"lyrics lookup failed ({e}); the app will try again later")
-        return None
-    if not res:
-        log(f"no lyrics found for '{q}'")
-        return []
-    # timed lyrics only if their line starts really line up with the singing in THIS recording
-    timed, best_fit = None, 0.0
-    for x in res:
-        if x.get("syncedLyrics") and abs(x["duration"] - duration) < 6:
-            lines = parse_lrc(x["syncedLyrics"])
-            fit = timing_fit(lines, notes) if notes else (1.0 if abs(x["duration"] - duration) < 2 else 0.0)
-            if fit > best_fit:
-                timed, best_fit = (x, lines), fit
-    if timed and best_fit >= 0.35:
-        best, lines = timed
-        log(f"lyric timing matches the singing ({best_fit:.0%})")
+        log(f"lyrics: transcription failed ({e}); no lyrics shipped")
+        return [], {"source": "none", "reason": f"transcription failed: {e}"}
+    heard = sum(len(_words(s["text"])) for s in segs if s["ok"])
+    if heard < 15:
+        log("lyrics: too few clear words heard; no lyrics shipped")
+        return [], {"source": "none", "reason": "too few words heard", "heard": heard}
+    try:
+        cands = lrclib_search(title)
+    except Exception as e:
+        log(f"lyrics: published-lyrics lookup failed ({e}); using what was heard")
+        cands = []
+    best = (None, *align_lyrics(segs))  # Whisper only
+    for c in cands[:10]:
+        lines, agree = align_lyrics(segs, c["lines"])
+        if agree > best[2]:
+            best = (c, lines, agree)
+    c, lines, agree = best
+    if c and agree >= LYRIC_AGREE:
+        lines, agree = align_lyrics(segs, c["lines"])  # re-run to keep its dropped list
+        info = {"source": "heard+published", "published": c["name"], "agree": round(agree, 2),
+                "unconfirmed": align_lyrics.dropped}
+        log(f"lyrics: verified, {agree:.0%} of heard words match '{c['name']}'")
     else:
-        if timed:
-            log(f"closest timed lyrics only fit {best_fit:.0%}; lines will follow sections")
-        timed = None
-        plain = lambda x: [s.strip() for s in (x.get("plainLyrics") or re.sub(r"\[[\d:.]+\]", "", x["syncedLyrics"])).splitlines() if s.strip()]
-        # untimed lines follow sections, so prefer the version whose line count fits the sections best
-        best = min(res[:8], key=lambda x: abs(len(plain(x)) - n_sections)) if n_sections else res[0]
-        lines = [{"t": None, "text": s} for s in plain(best)]
-    log(f"lyrics: {best['trackName']} – {best['artistName']} ({'timed' if timed else 'follow sections'})")
-    return lines
+        lines, _ = align_lyrics(segs)
+        info = {"source": "heard", "agree": round(agree, 2)}
+        log(f"lyrics: no published version matches the singing (best {agree:.0%}); using what was heard")
+    info["lines"], info["heard"] = len(lines), heard
+    return lines, info
 
 
 # ---------- 6. pack ----------
@@ -437,9 +545,11 @@ def pack(title, out, notes, phrases, tune, kind="vocal"):
         "notes": notes,
         "phrases": phrases,
     }
-    lyrics = fetch_lyrics(title, info.duration, notes if kind == "vocal" else None, len(phrases))
-    if lyrics is not None:
-        meta["lyrics"], meta["lyricsTried"] = lyrics, True
+    if kind == "vocal":
+        meta["lyrics"], meta["lyricsCheck"] = make_lyrics(title, out / "vocals.wav")
+    else:  # no singing to check against -> no lyrics (add them by hand in the app's 📝 dialog)
+        meta["lyrics"], meta["lyricsCheck"] = [], {"source": "none", "reason": "instrumental: nothing sung to verify against"}
+    meta["lyricsTried"] = True
     dest = SONGS_DIR / f"{slugify(title)}.song"
     with zipfile.ZipFile(dest, "w", zipfile.ZIP_STORED) as z:
         z.writestr("song.json", json.dumps(meta, separators=(",", ":")))

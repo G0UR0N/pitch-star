@@ -1,0 +1,41 @@
+lyrics check 2026-11-22 20:44  (fix)
+
+== its-beginning-to-look-a-lot-like-christmas.song  [vocal]
+   shipped: 26 lines (checked)  ->  verified: 26 lines, {'source': 'heard+published', 'published': "It's Beginning To Look A Lot Like Christmas – Bing Crosby, London Symphony Orchestra", 'agree': 0.99, 'unconfirmed': ['28.6 Thank you.'], 'lines': 26, 'heard': 92}
+   shipped lyrics DIFFER from the verified ones
+        29.98  It's beginning to look a lot like Christmas
+        33.58  Everywhere you go
+        38.93  Take a look at the five and ten, it's glistening once again
+        44.06  With candy canes and silver lanes that glow
+        48.66  It's beginning to look a lot like Christmas
+        53.38  Toys in every store
+   FIXED (backup: its-beginning-to-look-a-lot-like-christmas.20261122-2044.song)
+
+== jingle-bells-christmas-song-super-simple-songs.song  [vocal]
+   shipped: 40 lines (checked)  ->  verified: 40 lines, {'source': 'heard+published', 'published': 'Jingle Bells – Michael Bublé & The Puppini Sisters', 'agree': 0.97, 'unconfirmed': ['143.5 And I want her so pen slay'], 'lines': 40, 'heard': 66}
+   shipped lyrics match the verified ones
+        30.06  Jingle bells, jingle bells
+         31.4  Jingle all the way
+         33.6  Oh, what fun it is to ride
+        35.92  In a one horse open sleigh
+        38.54  Jingle bells, jingle bells
+         41.0  Jingle all the way
+
+== twinkle-test.song  [None]
+   shipped: 0 lines (checked)  ->  verified: 0 lines, {'source': 'none', 'reason': 'instrumental: nothing sung to verify against'}
+   shipped lyrics match the verified ones
+
+== where-are-you-christmas-how-the-grinch-stole-christmas-piano.song  [instrumental]
+   shipped: 0 lines (checked)  ->  verified: 0 lines, {'source': 'none', 'reason': 'instrumental: nothing sung to verify against'}
+   shipped lyrics match the verified ones
+
+== where-are-you-christmas-taylor-momsen-how-the-grinch-stole-c.song  [vocal]
+   shipped: 10 lines (checked)  ->  verified: 10 lines, {'source': 'heard+published', 'published': 'Where Are You Christmas? – The Pretty Reckless', 'agree': 0.69, 'unconfirmed': ["113.9 Wait, that's too much.", '120.2 Oh, so OP!', '120.3 Take a pick.', '120.7 Star Wars', '122.2 Be a tab reaction', '123.4 H-', '124.2 Hey, sound not.', '126.9 please slide ooooooooooooooooooooooooooooooooooo', '130.4 up'], 'lines': 10, 'heard': 41}
+   shipped lyrics match the verified ones
+         9.58  Where are you Christmas?
+        14.22  Why can't I find you?
+        18.16  Why have you gone away?
+        25.64  My world is changing I'm rearranging
+        33.22  Does that mean Christmas changes too?
+        47.78  Where are you Christmas?
+   FIXED (backup: where-are-you-christmas-taylor-momsen-how-the-grinch-stole-c.20261122-2045.song)

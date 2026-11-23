@@ -482,8 +482,9 @@ def align_lyrics(segs, cand=None):
     1-3 consecutive published lines that best match it (if >= LYRIC_MATCH). Returns
     (lines, share of heard words that matched)."""
     from difflib import SequenceMatcher
-    lines, matched, total, dropped, spans = [], 0, 0, [], []
+    lines, matched, total, dropped, spans, dropped_segs = [], 0, 0, [], [], []
     align_lyrics.dropped = dropped
+    align_lyrics.dropped_segs = dropped_segs  # the heard segments behind `dropped` (for re-listening)
     align_lyrics.spans = spans  # heard time of the confirmed lines (for the coverage check)
     pub = [(l, _words(l)) for l in (cand or [])]
 
@@ -494,7 +495,7 @@ def align_lyrics(segs, cand=None):
         return flat, owner
 
     def best_win(flat):
-        best = (0.0, None)
+        best = (0.0, None, 0)
         for i in range(len(pub)):
             for n in range(1, 9):  # a re-listened stretch can hold a whole verse
                 win = pub[i:i + n]
@@ -502,7 +503,7 @@ def align_lyrics(segs, cand=None):
                     break
                 r = SequenceMatcher(None, flat, [w for _, x in win for w in x], autojunk=False).ratio()
                 if r > best[0]:
-                    best = (r, win)
+                    best = (r, win, i)
         return best
 
     # Whisper sometimes splits one sung line in two: join neighbours when together they match better
@@ -529,7 +530,7 @@ def align_lyrics(segs, cand=None):
             win = best[1]
             sm = SequenceMatcher(None, flat, [w for _, x in win for w in x], autojunk=False)
             pos = 0
-            for text, ws in win:
+            for k_line, (text, ws) in enumerate(win):
                 # time of this published line = heard word aligned to its first word
                 t = None
                 for a, b, n in sm.get_matching_blocks():
@@ -537,15 +538,17 @@ def align_lyrics(segs, cand=None):
                         t = s["words"][owner[a + pos - b]]["t"]; break
                     if n and b > pos and t is None:
                         t = s["words"][owner[a]]["t"]; break
-                lines.append({"t": t if t is not None else s["t"], "text": text})
+                lines.append({"t": t if t is not None else s["t"], "text": text, "i": best[2] + k_line})
                 pos += len(ws)
         elif cand:  # published version in use: a heard line it can't confirm is likely misheard
             dropped.append(f"{s['t']:.1f} {s['text']}")
+            dropped_segs.append(s)
         elif s["ok"]:
             for t, text in _split_long([w["w"] for w in s["words"]], [w["t"] for w in s["words"]]):
                 lines.append({"t": t, "text": text})
     for i in range(1, len(lines)):  # keep times increasing
         lines[i]["t"] = round(max(lines[i]["t"], lines[i - 1]["t"] + 0.05), 2)
+    align_lyrics.counts = (matched, total)
     return lines, (matched / total if total else 0.0)
 
 
@@ -563,17 +566,91 @@ def make_lyrics(title, vocals_wav, notes=None):
     """Verified lyrics for a sung recording: (lines, check-info). Never raises.
     Ships only at > LYRIC_SHIP certainty, else no lyrics (see LYRIC_SHIP)."""
     lines, info = _make_lyrics(title, vocals_wav, notes)
+    spans, pub, counts, bad = (info.pop(k, d) for k, d in
+                               (("spans", []), ("pub", None), ("counts", None), ("bad", [])))
     if not lines:
         return lines, info
-    cov = lyric_coverage(info.pop("spans", []), notes)
+    cov = lyric_coverage(spans, notes)
     info["coverage"] = round(cov, 3)  # 3 places so the app's "> 95%" check sees e.g. 0.953, not 0.95
     sure = info["source"] == "heard+published" and info["agree"] > LYRIC_SHIP and cov > LYRIC_SHIP
+    if not sure and info["source"] == "heard+published" and pub and counts and notes:
+        lines, info, sure = use_answers(title, lines, info, pub, counts, bad, spans, notes)
+        cov = info["coverage"]
     if not sure:
         log(f"lyrics: NOT shipped - certainty below {LYRIC_SHIP:.0%} (match {info['agree']:.0%}, coverage {cov:.0%})")
-        return [], {**info, "source": "none", "lines": 0,
-                    "reason": f"below {LYRIC_SHIP:.0%} certainty (match {info['agree']:.0%}, sung time covered {cov:.0%}); add by hand with 📝"}
+        out = {**info, "source": "none", "lines": 0,
+               "reason": f"below {LYRIC_SHIP:.0%} certainty (match {info['agree']:.0%}, sung time covered {cov:.0%}); add by hand with 📝"}
+        if info.get("ask"):
+            out["reason"] = f"below {LYRIC_SHIP:.0%} certainty; {len(info['ask'])} rough part(s) need a human ear"
+        return [], out
     log(f"lyrics: shipped, match {info['agree']:.0%}, sung time covered {cov:.0%}")
-    return lines, info
+    return [{"t": l["t"], "text": l["text"]} for l in lines], info
+
+
+# Human answers for rough parts, kept in the songs folder (Drive; not in the public repo:
+# it holds lyric text): {"<song title>": [{"t": seconds, "text": "the sung line"}]}.
+ANSWERS = SONGS_DIR / "lyrics_answers.json"
+
+
+def use_answers(title, lines, info, pub, counts, bad, spans, notes):
+    """User, 2026-11-23: "if you need help deciphering rough parts, you can que it up for me to
+    help" / "don't lean on me more than absolutely necessary tho". Rough parts = sung time no
+    confirmed line covers, plus heard lines no published line confirms. Parts with a human
+    answer (ANSWERS) count as confirmed. If that still isn't over LYRIC_SHIP, info["ask"] lists
+    only the fewest further parts (biggest first) that would get it over; none if even all can't.
+    Returns (lines, info, sure)."""
+    from difflib import SequenceMatcher
+    inside = lambda t: any(a - 1.0 <= t <= b + 1.0 for a, b in spans)
+    tot = sum(n["d"] for n in notes)
+    rough = []  # [a, b, sung seconds, heard words, heard text]
+    for n in notes:
+        if not inside(n["t"]):
+            rough.append([n["t"], n["t"] + n["d"], n["d"], 0, ""])
+    for s in bad:
+        rough.append([s["words"][0]["t"], max(w.get("e", w["t"]) for w in s["words"]), 0.0,
+                      len(_words(s["text"])), s["text"]])
+    parts = []
+    for r in sorted(rough, key=lambda r: r[0]):
+        if parts and r[0] - parts[-1][1] < 1.5:
+            p = parts[-1]; p[1] = max(p[1], r[1]); p[2] += r[2]; p[3] += r[3]; p[4] = (p[4] + " " + r[4]).strip()
+        else:
+            parts.append(list(r))
+    try:
+        answers = json.loads(ANSWERS.read_text(encoding="utf-8")).get(title, [])
+    except (OSError, ValueError):
+        answers = []
+    matched, total = counts
+    cov = tot * lyric_coverage(spans, notes)
+    lines = [dict(l) for l in lines]
+    open_parts, used = [], 0
+    for p in parts:
+        ans = [x for x in answers if p[0] - 1.0 <= x["t"] <= p[1] + 1.0]
+        if ans:
+            matched += p[3]; cov += p[2]; used += 1
+            lines += [{"t": x["t"], "text": x["text"]} for x in ans]
+        else:
+            open_parts.append(p)
+    lines.sort(key=lambda l: l["t"])
+    ok = lambda: matched / max(total, 1) > LYRIC_SHIP and cov / tot > LYRIC_SHIP
+    info = {**info, "agree": round(matched / max(total, 1), 2), "coverage": round(cov / tot, 3)}
+    if used:
+        info["source"] = "heard+published" if ok() else info["source"]
+        info["human"] = used  # rough parts settled by a human answer
+        log(f"lyrics: {used} rough part(s) settled by a human answer")
+    if ok():
+        return lines, {**info, "lines": len(lines)}, True
+    ask = []
+    for p in sorted(open_parts, key=lambda p: -(p[2] / tot + p[3] / max(total, 1))):
+        if ok():
+            break
+        ask.append(p); matched += p[3]; cov += p[2]
+    if ok():  # reachable: queue just these, with a best guess from the published version
+        guess = lambda h: max(pub, key=lambda l: SequenceMatcher(None, h.lower(), l.lower()).ratio()) if h else ""
+        info["ask"] = [{"a": round(p[0], 1), "b": round(p[1], 1), "heard": p[4], "guess": guess(p[4])}
+                       for p in sorted(ask)]
+        for q in info["ask"]:
+            log(f"lyrics: ASK a human: {q['a']:.1f}-{q['b']:.1f} s, heard '{q['heard']}', best guess '{q['guess']}'")
+    return lines, info, False
 
 
 def _make_lyrics(title, vocals_wav, notes=None):
@@ -598,9 +675,12 @@ def _make_lyrics(title, vocals_wav, notes=None):
             best = (c, lines, agree)
     c, lines, agree = best
     if c and agree >= LYRIC_AGREE:
+        # Re-listening to unconfirmed lines on their own was tried and removed (2026-11-23): it
+        # fixed nothing and cost two packs (It's Beginning… coverage 100% -> 94%). Humans answer instead.
         lines, agree = align_lyrics(segs, c["lines"])  # re-run to keep its dropped list
         info = {"source": "heard+published", "published": c["name"], "agree": round(agree, 2),
-                "unconfirmed": align_lyrics.dropped, "spans": align_lyrics.spans}
+                "unconfirmed": align_lyrics.dropped, "spans": align_lyrics.spans,
+                "pub": c["lines"], "counts": align_lyrics.counts, "bad": align_lyrics.dropped_segs}
         log(f"lyrics: verified, {agree:.0%} of heard words match '{c['name']}'")
     else:
         lines, _ = align_lyrics(segs)

@@ -1,8 +1,8 @@
 // ?v= stamps are rewritten by publish.ps1 so every publish loads fresh files past GitHub's CDN cache
-import { readZip, writeZip } from './zip.js?v=202611231535';
-import * as db from './db.js?v=202611231535';
-import { detectPitch } from './pitch.js?v=202611231535';
-import { framesToNotes, placeOctave, toPhrases, noteRange } from './melody.js?v=202611231535';
+import { readZip, writeZip } from './zip.js?v=202611231606';
+import * as db from './db.js?v=202611231606';
+import { detectPitch } from './pitch.js?v=202611231606';
+import { framesToNotes, placeOctave, toPhrases, noteRange } from './melody.js?v=202611231606';
 
 const $ = s => document.querySelector(s);
 const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
@@ -1069,7 +1069,7 @@ function releaseWake() { wake?.release().catch(() => {}); wake = null; }
 
 // ---------- boot ----------
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
-  navigator.serviceWorker.register('sw.js?v=202611231535', { updateViaCache: 'none' });
+  navigator.serviceWorker.register('sw.js?v=202611231606', { updateViaCache: 'none' });
   // new version installed -> reload once, but never in the middle of a song
   const hadController = !!navigator.serviceWorker.controller;
   navigator.serviceWorker.addEventListener('controllerchange', () => {
@@ -1090,7 +1090,8 @@ function dropUnverified(meta) {
   if (!meta.lyrics?.length || c?.source === 'manual') return false;
   if (c?.coverage != null && (c.agree <= LYRIC_SHIP || c.coverage <= LYRIC_SHIP)) {
     meta.lyrics = [];
-    meta.lyricsCheck = { ...c, source: 'none', reason: `below ${LYRIC_SHIP * 100}% certainty; add by hand with 📝` };
+    // stale: the Drive pack may pass now (a human answer can settle a rough part), so offer a re-add
+    meta.lyricsCheck = { ...c, source: 'none', stale: true, reason: `below ${LYRIC_SHIP * 100}% certainty; re-add the song from Drive` };
     return true;
   }
   if (c?.coverage != null) return false;

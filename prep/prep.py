@@ -298,6 +298,39 @@ def to_phrases(notes, gap=0.6, max_len=12.0, min_len=2.5):
     ]
 
 
+# ---------- 5b. lyrics (LRCLIB, free; timings kept only for the same recording) ----------
+def fetch_lyrics(title, duration):
+    import urllib.parse
+    import urllib.request
+
+    q = re.sub(r"\(.*?\)|\[.*?\]|\|.*$|\s[-–—]\s.*$", "", title)
+    q = re.sub(r"\b(piano|karaoke|instrumental|accompaniment|lyrics?|official|video|audio)\b", "", q, flags=re.I)
+    q = re.sub(r"\s+", " ", q).strip()
+    try:
+        req = urllib.request.Request("https://lrclib.net/api/search?" + urllib.parse.urlencode({"q": q}),
+                                     headers={"User-Agent": "pitch-star-prep"})
+        res = [x for x in json.load(urllib.request.urlopen(req, timeout=15)) if x.get("plainLyrics") or x.get("syncedLyrics")]
+    except Exception as e:
+        log(f"lyrics lookup failed ({e}); the app will try again later")
+        return None
+    if not res:
+        log(f"no lyrics found for '{q}'")
+        return []
+    timed = [x for x in res if x.get("syncedLyrics") and abs(x["duration"] - duration) < 4]
+    best = (timed or res)[0]
+    if timed:
+        lines = []
+        for ln in best["syncedLyrics"].splitlines():
+            m = re.match(r"^\[(\d+):(\d+(?:\.\d+)?)\](.*)", ln)
+            if m and m.group(3).strip():
+                lines.append({"t": int(m.group(1)) * 60 + float(m.group(2)), "text": m.group(3).strip()})
+    else:
+        text = best.get("plainLyrics") or re.sub(r"\[[\d:.]+\]", "", best["syncedLyrics"])
+        lines = [{"t": None, "text": s.strip()} for s in text.splitlines() if s.strip()]
+    log(f"lyrics: {best['trackName']} – {best['artistName']} ({'timed' if timed else 'follow sections'})")
+    return lines
+
+
 # ---------- 6. pack ----------
 def pack(title, out, notes, phrases, tune, kind="vocal"):
     SONGS_DIR.mkdir(exist_ok=True)
@@ -316,6 +349,9 @@ def pack(title, out, notes, phrases, tune, kind="vocal"):
         "notes": notes,
         "phrases": phrases,
     }
+    lyrics = fetch_lyrics(title, info.duration)
+    if lyrics is not None:
+        meta["lyrics"], meta["lyricsTried"] = lyrics, True
     dest = SONGS_DIR / f"{slugify(title)}.song"
     with zipfile.ZipFile(dest, "w", zipfile.ZIP_STORED) as z:
         z.writestr("song.json", json.dumps(meta, separators=(",", ":")))

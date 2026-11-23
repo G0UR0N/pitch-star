@@ -32,6 +32,11 @@ Best on the PC in Chrome/Edge (open the game URL), headphones on.
 3. Pink bars = what was heard. **Listen** plays them as tones over the music. **Keep** / **Retry** / **Discard**.
 4. **⤓ Export** saves the fixed `.song`. On PC, pick `G:\My Drive\PitchStar` (replace the old file). On the phone, remove the old copy and **Add songs** again.
 
+## Lyrics (automatic)
+- Found automatically from LRCLIB (free lyrics database): by `prep.bat` when a song is made, and by the app the first time a song opens without lyrics.
+- Karaoke line under the notes: words light up with the melody; next line shown dim. **Lyrics** checkbox on the play screen turns them on/off.
+- If the timing is off: 📝 → **Save + tap to sync**, then tap (or Space) as each line starts. 📝 → **Find** picks a different version.
+
 ## Dev
 - Local test: run the `game` launch config, open `http://localhost:8765/app/`.
 - `?sim=1` = fake singer (no mic). `?load=../songs/x.song` = auto-import.

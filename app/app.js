@@ -1,8 +1,8 @@
 // ?v= stamps are rewritten by publish.ps1 so every publish loads fresh files past GitHub's CDN cache
-import { readZip, writeZip } from './zip.js?v=202611221658';
-import * as db from './db.js?v=202611221658';
-import { detectPitch } from './pitch.js?v=202611221658';
-import { framesToNotes, placeOctave, toPhrases, noteRange } from './melody.js?v=202611221658';
+import { readZip, writeZip } from './zip.js?v=202611221706';
+import * as db from './db.js?v=202611221706';
+import { detectPitch } from './pitch.js?v=202611221706';
+import { framesToNotes, placeOctave, toPhrases, noteRange } from './melody.js?v=202611221706';
 
 const $ = s => document.querySelector(s);
 const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
@@ -11,10 +11,11 @@ const fmtTime = s => (s = Math.max(0, s), `${Math.floor(s / 60)}:${String(Math.f
 const TOL = { easy: 100, normal: 60, hard: 40 };
 const params = new URLSearchParams(location.search);
 const SIM = params.has('sim'); // dev: fake singer that follows the melody
+if (SIM) window.__S = () => S; // dev inspection
 
 // ---------- settings ----------
 const settings = (() => {
-  const d = { latency: 100, difficulty: 'normal', passTarget: 70, guide: 0.3 };
+  const d = { latency: 100, difficulty: 'normal', passTarget: 70, guide: 0.3, lyrics: true };
   try { return { ...d, ...JSON.parse(localStorage.getItem('psg-settings') || '{}') }; } catch { return d; }
 })();
 const saveSettings = () => { try { localStorage.setItem('psg-settings', JSON.stringify(settings)); } catch {} };
@@ -36,12 +37,14 @@ async function renderLibrary() {
     const el = document.createElement('div'); el.className = 'card';
     el.innerHTML = `<div class="meta"><b></b><small>${fmtTime(s.meta.duration)} · ${s.meta.phrases.length} sections${best[s.id] != null ? ` · best ${best[s.id]}` : ''}</small></div>
       <button class="btn primary small" data-a="sing">Sing</button>
+      <button class="icon" data-a="ly" title="Lyrics" aria-label="Lyrics">📝</button>
       <button class="icon" data-a="rec" title="Record melody" aria-label="Record melody">🎙️</button>
       <button class="icon" data-a="exp" title="Export song file" aria-label="Export">⤓</button>
       <button class="icon" data-a="del" title="Remove" aria-label="Delete">🗑️</button>`;
     el.querySelector('b').textContent = s.title + (s.meta.edited ? ' ✎' : '');
     el.querySelector('[data-a=sing]').onclick = () => openSong(s.id);
     el.querySelector('[data-a=rec]').onclick = () => openSong(s.id, { record: true });
+    el.querySelector('[data-a=ly]').onclick = () => openLyrics(s.id);
     el.querySelector('[data-a=exp]').onclick = () => exportSong(s.id);
     el.querySelector('[data-a=del]').onclick = async () => {
       if (confirm(`Remove "${s.title}"?`)) { await db.deleteSong(s.id); renderLibrary(); }
@@ -64,7 +67,7 @@ async function importPack(buf, fname) {
 $('#importInput').onchange = async e => {
   let ok = 0;
   for (const f of e.target.files) {
-    try { await importPack(await f.arrayBuffer(), f.name); ok++; } catch (err) { toast(`Couldn't add ${f.name}: ${err.message}`, 4000); }
+    try { await importPack(await f.arrayBuffer(), f.name); ok++; autoLyrics(f.name.replace(/\.song$/i, '')); } catch (err) { toast(`Couldn't add ${f.name}: ${err.message}`, 4000); }
   }
   e.target.value = '';
   if (ok) toast(`Added ${ok} song${ok > 1 ? 's' : ''}`);
@@ -72,14 +75,18 @@ $('#importInput').onchange = async e => {
 };
 
 // ---------- audio ----------
-let ctx, analyser, micBuf, osc, melGain;
+let ctx, OUT, analyser, micBuf, osc, melGain;
 async function ensureAudio() {
-  ctx ??= new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 'interactive' });
+  if (!ctx) {
+    ctx = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 'interactive' });
+    OUT = ctx.createGain(); OUT.gain.value = SIM ? 0 : 1; // test mode (?sim) is silent
+    OUT.connect(ctx.destination);
+  }
   if (ctx.state !== 'running') await ctx.resume();
   if (!osc) {
     osc = ctx.createOscillator(); osc.type = 'triangle';
     melGain = ctx.createGain(); melGain.gain.value = 0;
-    osc.connect(melGain).connect(ctx.destination); osc.start();
+    osc.connect(melGain).connect(OUT); osc.start();
   }
   if (!micStream && !SIM) await openMic();
 }
@@ -150,7 +157,7 @@ let S = null;
 const cv = $('#cv'), g = cv.getContext('2d');
 
 async function openSong(id, opts = {}) {
-  const song = await db.getSong(id);
+  const song = await autoLyrics(id);
   if (!song) return;
   try { await ensureAudio(); } catch (e) { toast('Microphone is needed to play. Allow mic access and try again.', 5000); return; }
   closeSession();
@@ -158,7 +165,7 @@ async function openSong(id, opts = {}) {
   const backing = mk(song.backing), vocals = mk(song.vocals);
   const gB = ctx.createGain(), gV = ctx.createGain();
   const nB = ctx.createMediaElementSource(backing), nV = ctx.createMediaElementSource(vocals);
-  nB.connect(gB).connect(ctx.destination); nV.connect(gV).connect(ctx.destination);
+  nB.connect(gB).connect(OUT); nV.connect(gV).connect(OUT);
   const m = song.meta;
   // an instrumental's guide track is a tone render of the OLD notes; mute it once the melody was re-recorded
   const guideStale = m.edited && m.kind === 'instrumental';
@@ -169,7 +176,9 @@ async function openSong(id, opts = {}) {
     mode: 'song', queue: [], qi: 0, attempts: [], passes: 0, guideStale,
   };
   $('#melodyTog').checked = guideStale || !!opts.hearNotes;
-  $('#recPanel').hidden = true;
+  $('#recPanel').hidden = true; $('#syncPanel').hidden = true;
+  $('#lyricsTog').checked = settings.lyrics;
+  buildLyrics();
   resetStats();
   backing.onended = () => { if (S && S.mode === 'song') finishSong(); };
   $('#playTitle').textContent = song.title;
@@ -177,7 +186,8 @@ async function openSong(id, opts = {}) {
   $('#speedSel').value = '1';
   $('#btnPlay').textContent = '▶ Start';
   $('#liveScore').textContent = '0';
-  if (opts.record) startRecord();
+  if (opts.sync) startSync();
+  else if (opts.record) startRecord();
   else if (opts.practice) startPractice(opts.practice);
   else { S.mode = 'song'; $('#practicePanel').hidden = true; $('#playSub').textContent = 'Full song'; seek(0); }
   show('play'); resize();
@@ -203,6 +213,7 @@ function rangeScore(a, b, judgedOnly = false) {
   let sum = 0, dur = 0;
   for (let i = a; i < b; i++) {
     if (judgedOnly && !S.stats[i].judged) continue;
+    if (S.stats[i].judged && !S.stats[i].tot) continue; // never measured (app stalled / hidden): don't count as a miss
     sum += noteScore(S.stats[i]) * S.notes[i].d; dur += S.notes[i].d;
   }
   return dur ? Math.round((sum / dur) * 100) : 0;
@@ -266,7 +277,13 @@ function tick() {
   const L = (settings.latency / 1000) * S.rate;
   const ts = t - L; // song time of the voice we're hearing now
   let r = null;
+  lyricsTick(ts);
   if (S.mode === 'record') { recordTick(t, ts); draw(ts, ts); requestAnimationFrame(tick); return; }
+  if (S.mode === 'sync') {
+    melody(t);
+    if (S.running && (S.backing.ended || t >= S.meta.duration - 0.05)) finishSync();
+    draw(ts, ts); requestAnimationFrame(tick); return;
+  }
   if (S.running) {
     r = SIM ? simVoice(ts) : readMic();
     scoreFrame(ts, r?.midi ?? null);
@@ -321,6 +338,7 @@ function judge(ts) {
     const i = S.ji++, st = S.stats[i];
     if (!inLoop(i) || st.judged) continue;
     st.judged = true;
+    if (!st.tot) continue;
     const sc = noteScore(st), n = S.notes[i];
     const [text, color] = sc >= 0.8 ? ['Perfect!', '--gold'] : sc >= 0.5 ? ['Good', '--good'] : ['Miss', '--miss'];
     S.pops.push({ t: n.t + n.d, p: n.p, text, color: css(color), born: performance.now() });
@@ -663,6 +681,160 @@ async function exportSong(id) {
   toast('Exported to Downloads ✓');
 }
 
+// ---------- lyrics: auto-found online (LRCLIB), editable, tap-to-sync, karaoke display ----------
+const cleanTitle = t => t.replace(/\(.*?\)|\[.*?\]|\|.*$|\s[-–—]\s.*$/g, '')
+  .replace(/\b(piano|karaoke|instrumental|accompaniment|lyrics?|official|video|audio)\b/ig, '').replace(/\s+/g, ' ').trim();
+function parseLrc(s) {
+  return (s || '').split('\n').map(l => {
+    const m = l.match(/^\[(\d+):(\d+(?:\.\d+)?)\](.*)/);
+    return m && { t: +m[1] * 60 + +m[2], text: m[3].trim() };
+  }).filter(l => l && l.text);
+}
+async function searchLyrics(q) {
+  const r = await fetch('https://lrclib.net/api/search?q=' + encodeURIComponent(q));
+  if (!r.ok) throw new Error('search failed');
+  return (await r.json()).filter(x => x.plainLyrics || x.syncedLyrics);
+}
+// result -> [{t|null, text}]; keep timings only when it is (very likely) the same recording
+function lyricsFrom(x, duration) {
+  const timed = x.syncedLyrics && Math.abs(x.duration - duration) < 4;
+  if (timed) return { lines: parseLrc(x.syncedLyrics), timed: true };
+  const text = x.plainLyrics || parseLrc(x.syncedLyrics).map(l => l.text).join('\n');
+  return { lines: text.split('\n').map(s => s.trim()).filter(Boolean).map(text => ({ t: null, text })), timed: false };
+}
+async function autoLyrics(id) {
+  const s = await db.getSong(id);
+  if (!s || s.meta.lyrics?.length || s.meta.lyricsTried) return s;
+  s.meta.lyricsTried = true;
+  try {
+    const res = await searchLyrics(cleanTitle(s.title));
+    const best = res.find(x => x.syncedLyrics && Math.abs(x.duration - s.meta.duration) < 4) || res[0];
+    if (best) s.meta.lyrics = lyricsFrom(best, s.meta.duration).lines;
+  } catch { s.meta.lyricsTried = false; } // offline: try again another time
+  await db.putSong(s);
+  return s;
+}
+
+let lyId = null, lyTimes = null;
+async function openLyrics(id) {
+  lyId = id;
+  const s = await autoLyrics(id) || await db.getSong(id);
+  const ly = s.meta.lyrics || [];
+  $('#lyText').value = ly.map(l => l.text).join('\n');
+  lyTimes = ly.some(l => l.t != null) ? ly.map(l => l.t) : null;
+  $('#lySearch').value = cleanTitle(s.title);
+  $('#lyResults').innerHTML = '';
+  $('#lyInfo').textContent = !ly.length ? 'No lyrics found automatically. Try Find with a different title, or paste them.'
+    : lyTimes ? 'Timed to this recording ✓' : 'Each line follows a section. "Tap to sync" gives exact timing.';
+  $('#lyricsDlg').showModal();
+}
+$('#lyText').oninput = () => {
+  if (lyTimes && $('#lyText').value.split('\n').filter(l => l.trim()).length !== lyTimes.length) {
+    lyTimes = null; $('#lyInfo').textContent = 'Lines changed: timing reset. Use tap to sync.';
+  }
+};
+$('#btnLyFind').onclick = async () => {
+  const q = $('#lySearch').value.trim(), box = $('#lyResults');
+  if (!q) return;
+  box.textContent = 'Searching…';
+  try {
+    const res = (await searchLyrics(q)).slice(0, 8), s = await db.getSong(lyId);
+    box.innerHTML = '';
+    if (!res.length) box.textContent = 'Nothing found. Try another title or paste the lyrics.';
+    for (const x of res) {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'btn small';
+      const { lines, timed } = lyricsFrom(x, s.meta.duration);
+      b.textContent = `${x.trackName} – ${x.artistName} (${fmtTime(x.duration)})${timed ? '  ⏱ timed' : ''}`;
+      b.onclick = () => {
+        $('#lyText').value = lines.map(l => l.text).join('\n');
+        lyTimes = timed ? lines.map(l => l.t) : null;
+        $('#lyInfo').textContent = timed ? 'Timed to this recording ✓' : 'Each line follows a section. "Tap to sync" gives exact timing.';
+        box.innerHTML = '';
+      };
+      box.append(b);
+    }
+  } catch { box.textContent = 'Search failed (offline?). Paste the lyrics instead.'; }
+};
+async function saveLyrics() {
+  const lines = $('#lyText').value.split('\n').map(l => l.trim()).filter(Boolean);
+  const s = await db.getSong(lyId);
+  s.meta = { ...s.meta, lyricsTried: true, lyrics: lines.map((text, i) => ({ t: lyTimes ? lyTimes[i] : null, text })) };
+  await db.putSong(s);
+  return s;
+}
+$('#btnLySave').onclick = async () => { await saveLyrics(); $('#lyricsDlg').close(); toast('Lyrics saved ✓'); };
+$('#btnLySync').onclick = async () => {
+  const s = await saveLyrics(); $('#lyricsDlg').close();
+  if (s.meta.lyrics.length) openSong(lyId, { sync: true });
+};
+
+// resolve each line's start time (own timing, else its section) and each word's time (spread over the notes)
+function buildLyrics() {
+  const ly = S.meta.lyrics || [];
+  const starts = ly.map((l, i) => l.t ?? S.phrases[i]?.t0 ?? null);
+  S.lyr = [];
+  ly.forEach((l, i) => {
+    if (starts[i] == null) return;
+    const t0 = starts[i], t1 = starts.slice(i + 1).find(x => x != null) ?? t0 + 8;
+    const words = l.text.split(/\s+/);
+    const ns = S.notes.filter(n => n.t >= t0 - 0.2 && n.t < t1 - 0.1);
+    const wt = words.map((_, k) => ns.length ? ns[Math.floor((k * ns.length) / words.length)].t : t0 + (k * (t1 - t0)) / words.length);
+    S.lyr.push({ t0, words, wt });
+  });
+  S.lyIdx = -2;
+}
+function lyricsTick(ts) {
+  const box = $('#lyrics');
+  const want = settings.lyrics && S.lyr?.length && S.mode !== 'sync';
+  box.hidden = !want;
+  if (!want) return;
+  let i = -1;
+  for (let k = 0; k < S.lyr.length; k++) if (S.lyr[k].t0 - 0.6 <= ts) i = k; else break;
+  if (i !== S.lyIdx) {
+    S.lyIdx = i;
+    const cur = $('#lyCur'); cur.innerHTML = '';
+    if (i >= 0) S.lyr[i].words.forEach((w, k) => { const sp = document.createElement('span'); sp.className = 'w'; sp.textContent = w + ' '; cur.append(sp); });
+    $('#lyNext').textContent = S.lyr[i + 1]?.words.join(' ') || '';
+  }
+  if (i >= 0) {
+    const spans = $('#lyCur').children, wt = S.lyr[i].wt;
+    for (let k = 0; k < spans.length; k++) spans[k].classList.toggle('on', wt[k] <= ts);
+  }
+}
+$('#lyricsTog').onchange = e => { settings.lyrics = e.target.checked; saveSettings(); };
+
+function startSync() {
+  S.mode = 'sync'; S.sync = { i: 0, times: [] };
+  $('#practicePanel').hidden = false; $('#syncPanel').hidden = false;
+  $('#playSub').textContent = 'Tap to sync lyrics';
+  updateSyncUI();
+  seek(0);
+}
+function updateSyncUI() {
+  const ly = S.meta.lyrics, i = S.sync.i;
+  $('#pSec').textContent = `Line ${Math.min(i + 1, ly.length)} of ${ly.length}`;
+  $('#pAttempts').textContent = ly[i] ? `Next: “${ly[i].text}”` : 'Done';
+}
+function tapLine() {
+  if (!S || S.mode !== 'sync' || !S.running) return;
+  const ts = songTime() - (settings.latency / 1000) * S.rate;
+  S.sync.times[S.sync.i++] = Math.max(0, +(ts - 0.1).toFixed(2));
+  if (S.sync.i >= S.meta.lyrics.length) finishSync(); else updateSyncUI();
+}
+async function finishSync() {
+  if (!S || S.mode !== 'sync') return;
+  pause();
+  const id = S.song.id, times = S.sync.times;
+  const s = await db.getSong(id);
+  s.meta = { ...s.meta, lyrics: s.meta.lyrics.map((l, i) => ({ ...l, t: times[i] ?? l.t })) };
+  await db.putSong(s);
+  closeSession(); toast('Lyrics timing saved ✓');
+  openSong(id);
+}
+$('#btnTap').onclick = tapLine;
+addEventListener('keydown', e => { if (e.code === 'Space' && S?.mode === 'sync') { e.preventDefault(); tapLine(); } });
+
 // ---------- settings ----------
 const dlg = $('#settingsDlg');
 let micTestOn = false;
@@ -698,7 +870,7 @@ $('#btnCalib').onclick = async () => {
     const t = t0 + i * gap, o = ctx.createOscillator(), gn = ctx.createGain();
     o.frequency.value = 1200; gn.gain.setValueAtTime(0, t);
     gn.gain.linearRampToValueAtTime(0.4, t + 0.005); gn.gain.exponentialRampToValueAtTime(0.001, t + 0.08);
-    o.connect(gn).connect(ctx.destination); o.start(t); o.stop(t + 0.1);
+    o.connect(gn).connect(OUT); o.start(t); o.stop(t + 0.1);
     beeps.push(t);
   }
   const buf = new Float32Array(analyser.fftSize), onsets = [];
@@ -738,7 +910,7 @@ function releaseWake() { wake?.release().catch(() => {}); wake = null; }
 
 // ---------- boot ----------
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
-  navigator.serviceWorker.register('sw.js?v=202611221658', { updateViaCache: 'none' });
+  navigator.serviceWorker.register('sw.js?v=202611221706', { updateViaCache: 'none' });
   // new version installed -> reload once, but never in the middle of a song
   const hadController = !!navigator.serviceWorker.controller;
   navigator.serviceWorker.addEventListener('controllerchange', () => {

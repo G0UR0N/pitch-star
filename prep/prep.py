@@ -357,7 +357,29 @@ def to_phrases(notes, gap=0.6, max_len=12.0, min_len=2.5):
 
 
 # ---------- 5b. lyrics (LRCLIB, free; timings kept only for the same recording) ----------
-def fetch_lyrics(title, duration):
+def parse_lrc(s):
+    out = []
+    for ln in (s or "").splitlines():
+        m = re.match(r"^\[(\d+):(\d+(?:\.\d+)?)\](.*)", ln)
+        if m and m.group(3).strip():
+            out.append({"t": int(m.group(1)) * 60 + float(m.group(2)), "text": m.group(3).strip()})
+    return out
+
+
+def timing_fit(lines, notes):
+    """How well lyric line starts land on sung phrase starts (notes that follow a breath),
+    minus how well the same lines do when shifted 1.5 s (chance level for dense songs)."""
+    if not lines or not notes:
+        return 0.0
+    on = np.array([n["t"] for i, n in enumerate(notes)
+                   if i == 0 or n["t"] - (notes[i - 1]["t"] + notes[i - 1]["d"]) > 0.2])
+    if not len(on):
+        return 0.0
+    hit = lambda off: float(np.mean([np.min(np.abs(on - (l["t"] + off))) < 0.5 for l in lines]))
+    return hit(0.0) - max(hit(1.5), hit(-1.5))
+
+
+def fetch_lyrics(title, duration, notes=None, n_sections=0):
     import urllib.parse
     import urllib.request
 
@@ -374,17 +396,25 @@ def fetch_lyrics(title, duration):
     if not res:
         log(f"no lyrics found for '{q}'")
         return []
-    timed = [x for x in res if x.get("syncedLyrics") and abs(x["duration"] - duration) < 4]
-    best = (timed or res)[0]
-    if timed:
-        lines = []
-        for ln in best["syncedLyrics"].splitlines():
-            m = re.match(r"^\[(\d+):(\d+(?:\.\d+)?)\](.*)", ln)
-            if m and m.group(3).strip():
-                lines.append({"t": int(m.group(1)) * 60 + float(m.group(2)), "text": m.group(3).strip()})
+    # timed lyrics only if their line starts really line up with the singing in THIS recording
+    timed, best_fit = None, 0.0
+    for x in res:
+        if x.get("syncedLyrics") and abs(x["duration"] - duration) < 6:
+            lines = parse_lrc(x["syncedLyrics"])
+            fit = timing_fit(lines, notes) if notes else (1.0 if abs(x["duration"] - duration) < 2 else 0.0)
+            if fit > best_fit:
+                timed, best_fit = (x, lines), fit
+    if timed and best_fit >= 0.35:
+        best, lines = timed
+        log(f"lyric timing matches the singing ({best_fit:.0%})")
     else:
-        text = best.get("plainLyrics") or re.sub(r"\[[\d:.]+\]", "", best["syncedLyrics"])
-        lines = [{"t": None, "text": s.strip()} for s in text.splitlines() if s.strip()]
+        if timed:
+            log(f"closest timed lyrics only fit {best_fit:.0%}; lines will follow sections")
+        timed = None
+        plain = lambda x: [s.strip() for s in (x.get("plainLyrics") or re.sub(r"\[[\d:.]+\]", "", x["syncedLyrics"])).splitlines() if s.strip()]
+        # untimed lines follow sections, so prefer the version whose line count fits the sections best
+        best = min(res[:8], key=lambda x: abs(len(plain(x)) - n_sections)) if n_sections else res[0]
+        lines = [{"t": None, "text": s} for s in plain(best)]
     log(f"lyrics: {best['trackName']} – {best['artistName']} ({'timed' if timed else 'follow sections'})")
     return lines
 
@@ -407,7 +437,7 @@ def pack(title, out, notes, phrases, tune, kind="vocal"):
         "notes": notes,
         "phrases": phrases,
     }
-    lyrics = fetch_lyrics(title, info.duration)
+    lyrics = fetch_lyrics(title, info.duration, notes if kind == "vocal" else None, len(phrases))
     if lyrics is not None:
         meta["lyrics"], meta["lyricsTried"] = lyrics, True
     dest = SONGS_DIR / f"{slugify(title)}.song"

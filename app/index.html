@@ -9,7 +9,7 @@
 <link rel="icon" href="icon.svg">
 <link rel="apple-touch-icon" href="icon-192.png">
 <title>Pitch Star</title>
-<link rel="stylesheet" href="style.css?v=202611232326">
+<link rel="stylesheet" href="style.css?v=202611232328">
 </head>
 <body>
 
@@ -55,8 +55,26 @@
     <button id="btnRecRetry" class="btn">↻ Retry</button>
     <button id="btnRecDiscard" class="btn">✕ Discard</button>
   </div>
+  <div id="editPanel" class="practice editPanel" hidden>
+    <button id="edPrev" class="btn small" title="Previous note">‹</button>
+    <button id="edUp" class="btn small" title="Up a semitone">▲</button>
+    <button id="edDown" class="btn small" title="Down a semitone">▼</button>
+    <button id="edLeft" class="btn small" title="Earlier (0.05 s)">◀</button>
+    <button id="edRight" class="btn small" title="Later (0.05 s)">▶</button>
+    <button id="edShort" class="btn small" title="Shorter (0.05 s)">⇤ shorter</button>
+    <button id="edLong" class="btn small" title="Longer (0.05 s)">longer ⇥</button>
+    <button id="edMine" class="btn small" title="Set to the pitch you're singing">🎤 my pitch</button>
+    <button id="edAdd" class="btn small" title="Add a note at the white line">＋ add</button>
+    <button id="edDel" class="btn small" title="Delete note">🗑</button>
+    <button id="edNext" class="btn small" title="Next note">›</button>
+    <span id="edInfo" class="hint">Tap a note to pick it</span>
+    <button id="edDone" class="btn small primary">✓ Done</button>
+  </div>
   <footer class="controls">
     <button id="btnPlay" class="btn primary">▶ Start</button>
+    <button id="btnBack10" class="btn small" title="Back 10 seconds">⏪ 10s</button>
+    <button id="btnFwd10" class="btn small" title="Forward 10 seconds">⏩ 10s</button>
+    <button id="btnEdit" class="btn small" title="Fix the target notes">✎ Edit notes</button>
     <label class="ctl">Guide voice <input id="guideVol" type="range" min="0" max="1" step="0.05" value="0.3"></label>
     <label class="ctl tog"><input id="melodyTog" type="checkbox"> Hear notes</label>
     <label class="ctl tog"><input id="lyricsTog" type="checkbox"> Lyrics</label>
@@ -150,6 +168,6 @@
 </dialog>
 
 <div id="toast" class="toast" hidden></div>
-<script type="module" src="app.js?v=202611232326"></script>
+<script type="module" src="app.js?v=202611232328"></script>
 </body>
 </html>

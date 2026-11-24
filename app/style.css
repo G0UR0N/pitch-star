@@ -81,6 +81,9 @@ canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
 .ctl input[type=range] { width: 110px; }
 select { font: inherit; background: var(--panel2); color: var(--text); border: 0; border-radius: 8px; padding: 6px; }
 .practice { display: flex; align-items: center; gap: 8px; background: var(--panel); border-radius: 14px; padding: 8px; }
+.editPanel { flex-wrap: wrap; justify-content: center; }
+.editPanel[hidden] { display: none; }
+#edInfo { flex: 1 1 120px; text-align: center; }
 .pinfo { flex: 1; display: flex; flex-direction: column; align-items: center; }
 .pinfo span { color: var(--dim); font-size: .9rem; }
 

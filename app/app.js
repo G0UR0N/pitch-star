@@ -1,8 +1,8 @@
 // ?v= stamps are rewritten by publish.ps1 so every publish loads fresh files past GitHub's CDN cache
-import { readZip, writeZip } from './zip.js?v=202611232326';
-import * as db from './db.js?v=202611232326';
-import { detectPitch } from './pitch.js?v=202611232326';
-import { framesToNotes, placeOctave, toPhrases, noteRange } from './melody.js?v=202611232326';
+import { readZip, writeZip } from './zip.js?v=202611232328';
+import * as db from './db.js?v=202611232328';
+import { detectPitch } from './pitch.js?v=202611232328';
+import { framesToNotes, placeOctave, toPhrases, noteRange } from './melody.js?v=202611232328';
 
 const $ = s => document.querySelector(s);
 const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
@@ -336,6 +336,9 @@ async function openSong(id, opts = {}) {
   else if (opts.record) startRecord();
   else if (opts.practice) startPractice(opts.practice);
   else { S.mode = 'song'; $('#practicePanel').hidden = true; $('#playSub').textContent = m.lyricsCheck?.stale ? 'Full song · no lyrics until re-added from Drive' : 'Full song'; seek(m.start || 0); }
+  $('#editPanel').hidden = true;
+  $('#btnEdit').hidden = S.mode !== 'song';
+  $('#btnBack10').hidden = $('#btnFwd10').hidden = S.mode === 'sync' || S.mode === 'record';
   show('play'); resize();
   requestAnimationFrame(tick);
 }
@@ -416,6 +419,111 @@ $('#btnQuit').onclick = () => {
 $('#guideVol').oninput = e => { settings.guide = +e.target.value; saveSettings(); if (S && !S.guideStale) S.gV.gain.value = settings.guide; };
 $('#speedSel').onchange = e => { if (!S) return; S.rate = +e.target.value; S.backing.playbackRate = S.vocals.playbackRate = S.rate; };
 
+// ---------- skip back / forward 10 s (user, 2026-11-23) ----------
+function skip(dt) {
+  if (!S || S.starting || S.mode === 'sync' || S.mode === 'record') return;
+  const now = songTime();
+  const lo = S.mode === 'practice' ? S.loop.t0 : (S.meta.start || 0);
+  const hi = (S.mode === 'practice' ? S.loop.t1 : S.meta.duration) - 1;
+  const t = Math.min(hi, Math.max(lo, now + dt));
+  if (t < now) resetStats(lowerBound(t), lowerBound(now) + 1); // going back: those notes count again
+  seek(t);
+}
+$('#btnBack10').onclick = () => skip(-10);
+$('#btnFwd10').onclick = () => skip(10);
+
+// ---------- note editor: pick a target note, move / re-pitch / delete it (user, 2026-11-23:
+// "be able to delete or move/edit pitch targets"). Each change is saved right away. ----------
+function beep(p) {
+  if (!ctx || SIM) return;
+  const o = ctx.createOscillator(), gn = ctx.createGain();
+  o.type = 'triangle'; o.frequency.value = 440 * 2 ** ((p - 69) / 12);
+  gn.gain.setValueAtTime(0.2, ctx.currentTime); gn.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
+  o.connect(gn).connect(OUT); o.start(); o.stop(ctx.currentTime + 0.5);
+}
+function edShow() {
+  const n = S.notes[S.sel];
+  $('#edInfo').textContent = n ? `${noteName(n.p)} at ${fmtTime(n.t)}.${String(Math.floor((n.t % 1) * 10))} · ${n.d.toFixed(2)} s` : 'Tap a note to pick it';
+}
+function edSelect(i) {
+  if (!S.notes.length) { S.sel = null; edShow(); return; }
+  S.sel = Math.max(0, Math.min(S.notes.length - 1, i));
+  const n = S.notes[S.sel];
+  if (!S.running && (n.t < songTime() - 2.5 || n.t > songTime() + 4)) seek(Math.max(0, n.t - 1)); // bring it into view
+  beep(n.p); edShow();
+}
+let edTimer = null;
+function edChanged() {
+  S.notes.sort((a, b) => a.t - b.t);
+  S.phrases = toPhrases(S.notes);
+  S.stats = null; resetStats();
+  S.ni = S.ji = lowerBound(songTime());
+  edShow();
+  clearTimeout(edTimer);
+  const id = S.song.id, notes = S.notes;
+  edTimer = setTimeout(async () => {
+    const song = await db.getSong(id);
+    song.meta = { ...song.meta, notes, phrases: toPhrases(notes), range: noteRange(notes), edited: true };
+    await db.putSong(song);
+    if (S?.song.id === id) S.meta = song.meta;
+  }, 400);
+}
+function edApply(f) {
+  const n = S?.notes[S.sel];
+  if (!n) { toast('Tap a note first'); return; }
+  f(n);
+  const keep = n; edChanged(); S.sel = S.notes.indexOf(keep); edShow();
+}
+$('#btnEdit').onclick = () => {
+  if (!S || S.mode !== 'song') return;
+  S.edit = !S.edit;
+  $('#editPanel').hidden = !S.edit;
+  if (S.edit) { if (S.running) pause(); toast('Pause, tap a note, then fix it. Changes save as you go.'); edSelect(lowerBound(songTime())); }
+  else S.sel = null;
+};
+$('#edDone').onclick = () => { if (S?.edit) $('#btnEdit').onclick(); toast('Notes saved ✓ (⤓ exports them)'); };
+$('#edPrev').onclick = () => S?.edit && edSelect((S.sel ?? 1) - 1);
+$('#edNext').onclick = () => S?.edit && edSelect((S.sel ?? -1) + 1);
+$('#edUp').onclick = () => edApply(n => { n.p += 1; beep(n.p); });
+$('#edDown').onclick = () => edApply(n => { n.p -= 1; beep(n.p); });
+$('#edLeft').onclick = () => edApply(n => { n.t = +Math.max(0, n.t - 0.05).toFixed(3); });
+$('#edRight').onclick = () => edApply(n => { n.t = +(n.t + 0.05).toFixed(3); });
+$('#edMine').onclick = () => {
+  if (S?.live == null) { toast('Sing the note (music paused), then tap 🎤 again'); return; }
+  edApply(n => { n.p = Math.round(n.p + foldCents(S.live, n.p) / 100); beep(n.p); });
+};
+$('#edShort').onclick = () => edApply(n => { n.d = +Math.max(0.1, n.d - 0.05).toFixed(3); });
+$('#edLong').onclick = () => edApply(n => { n.d = +(n.d + 0.05).toFixed(3); });
+$('#edAdd').onclick = () => {
+  if (!S?.edit) return;
+  const t = +songTime().toFixed(3), near = S.notes[Math.min(S.notes.length - 1, lowerBound(t))] || S.notes[S.notes.length - 1];
+  const base = near?.p ?? Math.round((S.lo + S.hi) / 2);
+  const p = S.live != null ? Math.round(base + foldCents(S.live, base) / 100) : base;
+  const n = { t, d: 0.5, p };
+  S.notes.push(n); edChanged();
+  S.sel = S.notes.indexOf(n); beep(p); edShow();
+  toast(`Added ${noteName(p)} at the white line`);
+};
+$('#edDel').onclick = () => {
+  const n = S?.notes[S.sel];
+  if (!n) { toast('Tap a note first'); return; }
+  S.notes.splice(S.sel, 1); edChanged();
+  edSelect(Math.min(S.sel, S.notes.length - 1));
+  toast('Note deleted');
+};
+cv.addEventListener('click', e => {
+  if (!S?.edit || !S.geo) return;
+  const { t, pps, nowX, y, rowH, dpr } = S.geo, r = cv.getBoundingClientRect();
+  const px = (e.clientX - r.left) * dpr, py = (e.clientY - r.top) * dpr, tt = t + (px - nowX) / pps;
+  let best = -1, bd = Infinity;
+  S.notes.forEach((n, i) => {
+    if (tt < n.t - 0.15 || tt > n.t + n.d + 0.15) return;
+    const d = Math.abs(py - y(n.p));
+    if (d < bd) { bd = d; best = i; }
+  });
+  if (best >= 0 && bd < Math.max(rowH * 2, 30 * dpr)) edSelect(best);
+});
+
 // ---------- main loop ----------
 function tick() {
   if (!S) return;
@@ -435,6 +543,13 @@ function tick() {
     scoreFrame(ts, r?.midi ?? null);
     S.trail.push({ t: ts, m: r?.midi ?? null });
     while (S.trail.length && S.trail[0].t < ts - 4) S.trail.shift();
+    S.live = null;
+  } else if (!S.starting) {
+    // paused: still show the live pitch (helps fixing notes), but never score
+    // (user, 2026-11-23: "allow the live pitch marker to show up even if the music is paused" /
+    // "only allow scoring to work if music is playing")
+    const v = SIM ? simVoice(ts) : readMic();
+    S.live = v?.midi ?? null;
   }
   judge(ts);
   melody(t);
@@ -547,6 +662,7 @@ function draw(t, ts) {
     const st = S.stats[i];
     let col = css('--bar');
     if (!inLoop(i)) col = '#5a4f8a';
+    else if (st.judged && !st.tot) col = '#5a4f8a'; // skipped past / paused over: not sung, not scored
     else if (st.judged) { const sc = noteScore(st); col = sc >= 0.8 ? css('--gold') : sc >= 0.5 ? css('--good') : css('--miss'); }
     else if (n.t <= ts && st.tot) {
       const sc = noteScore(st); col = sc >= 0.8 ? css('--gold') : sc >= 0.5 ? css('--good') : css('--bar');
@@ -592,6 +708,20 @@ function draw(t, ts) {
       }
     }
   }
+  // paused: live pitch dot on the now line, with its note name
+  if (!S.running && S.live != null) {
+    const r = S.sel != null && S.notes[S.sel] ? S.notes[S.sel].p : ref(t), fm = fold(S.live, r), py = y(fm);
+    g.fillStyle = css('--accent'); g.beginPath(); g.arc(nowX, py, 8 * dpr, 0, 7); g.fill();
+    g.fillStyle = '#fff'; g.font = `bold ${14 * dpr}px system-ui`;
+    g.fillText(noteName(Math.round(fm)), nowX + 12 * dpr, py);
+  }
+  // selected note (edit mode)
+  if (S.edit && S.sel != null && S.notes[S.sel]) {
+    const n = S.notes[S.sel], bh = Math.max(6 * dpr, rowH * 0.75);
+    g.strokeStyle = '#fff'; g.lineWidth = 2 * dpr;
+    g.strokeRect(x(n.t) - 2 * dpr, y(n.p) - bh / 2 - 2 * dpr, Math.max(2, n.d * pps) + 2 * dpr, bh + 4 * dpr);
+  }
+  S.geo = { t, pps, nowX, y, rowH, dpr };
   // judgement pops
   const now = performance.now();
   S.pops = S.pops.filter(p => now - p.born < 900);
@@ -1092,7 +1222,7 @@ function releaseWake() { wake?.release().catch(() => {}); wake = null; }
 
 // ---------- boot ----------
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
-  navigator.serviceWorker.register('sw.js?v=202611232326', { updateViaCache: 'none' });
+  navigator.serviceWorker.register('sw.js?v=202611232328', { updateViaCache: 'none' });
   // new version installed -> reload once, but never in the middle of a song
   const hadController = !!navigator.serviceWorker.controller;
   navigator.serviceWorker.addEventListener('controllerchange', () => {

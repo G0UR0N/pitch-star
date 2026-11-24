@@ -128,8 +128,11 @@ def ov(a, b):
     return max(0.0, min(a["t"] + a["d"], b["t"] + b["d"]) - max(a["t"], b["t"]))
 
 
-def compare(notes, check):
-    """Spots where the pitch targets and the check singer disagree. Same rules as the app's ⚠ marks."""
+def compare(notes, check, lyrics=()):
+    """Spots where the pitch targets and the check singer disagree. Same rules as the app's ⚠ marks.
+    Speech under spoken lyric lines is not a missing note (2026-11-24: 8 of the 31 flags left on the
+    user's finished These Palace Walls were its spoken intro)."""
+    check = prep.drop_spoken([dict(x) for x in check], list(lyrics))[0]
     flags = []
     for i, n in enumerate(notes):
         hits = [c for c in check if ov(n, c) > 0]
@@ -175,7 +178,7 @@ def main():
             say("   instrumental pack: no sung vocals to check against, skipped")
             continue
         check, tune = sing(load_vocals(audio["vocals.mp3"]))
-        flags = compare(meta["notes"], check)
+        flags = compare(meta["notes"], check, meta.get("lyrics", []))
         say(f"   check singer: {len(check)} notes · targets: {len(meta['notes'])} · disagreements: {len(flags)}")
         for t, msg in flags:
             say(f"   {mmss(t)}  {msg}")

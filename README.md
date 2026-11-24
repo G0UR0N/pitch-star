@@ -67,6 +67,30 @@ Tools live in `%USERPROFILE%\PitchScoreGameTools` (Python env, ffmpeg, uv). Not 
   - **⚠ next** steps through the flagged spots.
   - **🔔 check singer** plays its tune instead of the targets while the song plays, so you can hear which one fits.
   - **use 🔔 pitch** sets the picked note to the check singer's note.
+- What your repairs taught us (These Palace Walls 0:00–1:15, compared with the original prep, 2026-11-24):
+  - Prep missed whole lines sung by the other singers: you added about 45 notes, at 0:18–0:20, 0:33–0:37 and 0:57–1:07. Prep tracked only the separated lead voice. **Fixed in prep** (below).
+  - The spoken intro had become notes, which you deleted. **Fixed in prep** (below).
+  - Some quick lines were run together into one long note. **OPEN**: splitting notes at Whisper's word starts scored worse, because its word times aren't precise enough.
+  - Not every pitch flag is a real error. At 0:31.0 you chose D# where both detectors hear E.
+
+## Prep improvements, scored against your repairs (user, 2026-11-24: "It may take some development effort for you to get a good bead on the melodies core notes and spacing" → "Yes, improve prep")
+- `tools\eval_notes.py` scores a way of making notes against notes you repaired by ear. The ground truth is stored once with `--snapshot <name> <until s>` in `PitchScoreGameTools\truth` (outside the public repo). The ways it tries are in `tools\note_variants.py`, and the report goes to `tools\eval_notes.log`.
+  - A made note counts as right when it has the right pitch (octaves ignored) and starts within 0.15 s of yours.
+  - The report gives three figures: found (share of your notes it made), real (share of its notes that are yours) and F1, which combines the two.
+- Now in prep, applied to new songs only (your edited packs are never rebuilt). On These Palace Walls 0:00–1:15, F1 went from **0.57 to 0.72**, notes found from 50% to 67%, and real notes from 67% to 78%.
+  - **Other singers:** where the lead singer is silent, prep takes the notes heard in all vocals. This added 3 notes on Jingle Bells and none on Where Are You Christmas.
+  - **No notes under spoken lines** (lines marked spoken in on-screen lyrics).
+- Tried and rejected (eval log, 2026-11-24):
+  - Snapping note starts to vocal attacks: slightly worse.
+  - Splitting notes at word starts: worse.
+  - Using the check singer's notes as targets: it finds more notes but makes too many extras.
+  - Lighter smoothing (0.08 s): +0.02, too small to change it for every song, because smoothing is what removes vibrato.
+  - Telling speech from singing by pitch steadiness: Faith Hill's ornamented singing looks as unsteady as speech.
+- More songs you repair become more ground truth. Snapshot them, and every change can be scored against all of them before it ships.
+- First repair by Claude (These Palace Walls after 1:15, 2026-11-24, for you to check):
+  - The backing is in C#/D♭ major from about 1:12.
+  - Claude changed a note only where both detectors agree and the key supports the change. That gave 6 pitch fixes and 5 merges of split held notes.
+  - Doubtful spots were left as they were. The backup is in `PitchScoreGameTools\backup`.
 - It is a second opinion, not the truth. Your ear decides.
   - Backing singers or a harmony line can pull it to another note, as at 1:34–1:37 of These Palace Walls.
   - Spoken intros show up as "missing notes".
@@ -133,4 +157,6 @@ Start trim: user, 2026-11-23: "I would like the option to trim off slow starts f
 - `?sim=1` = fake singer (no mic). `?load=../songs/x.song` = auto-import.
 - `prep\make_test_song.py` builds a synthetic test song.
 - Lesson (2026-11-24): the note canvas must be re-measured whenever its box changes size, not only on window resize. A ResizeObserver does this. Opening the edit panel squashed it to 83% height, so taps landed on each note's "ghost" above or below it. Taps are mapped with the canvas's own x and y scales.
+- Lesson (2026-11-24, check singer): pYIN's voiced probability runs low on these vocal stems. Gating at 0.4 lost half of the sung frames, so the check reported "no singing" under most targets. It now uses pYIN's own voiced flag plus a loudness gate.
+  - Sanity results: the check matches the targets to within 0.1 semitone on average on every pack (so there is no tuning mismatch), and Twinkle Test gives 0 flags.
 - Lessons (2026-11-22): the Claude desktop sandbox redirects writes under `AppData` (so tools live in `%USERPROFILE%\PitchScoreGameTools`, and `gh` login/publish must run in the user's real terminal). In PowerShell 5.1 scripts, keep `$ErrorActionPreference='Continue'` around native commands, or their stderr aborts the script.

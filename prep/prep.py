@@ -139,19 +139,21 @@ def isolate_lead(out):
 
 
 # ---------- 3. pitch track ----------
-def track_pitch(out):
+def track_pitch(out, src=None):
     import torchcrepe
     from scipy.ndimage import median_filter
     from scipy.signal import resample_poly
 
-    src = out / "vocals.wav"
-    if (out / "lead.wav").exists():
-        rms = lambda f: float(np.sqrt((sf.read(f, dtype="float32")[0] ** 2).mean()) + 1e-12)
-        ratio = rms(out / "lead.wav") / rms(out / "vocals.wav")
-        if ratio > 0.3:
-            src = out / "lead.wav"
-        else:  # karaoke model swallowed the lead (e.g. unusual voice): keep all vocals
-            log(f"lead track nearly silent ({ratio:.2f}); using all vocals")
+    if src is None:  # (a given stem: tools\eval_notes.py tries each)
+        src = out / "vocals.wav"
+        if (out / "lead.wav").exists():
+            rms = lambda f: float(np.sqrt((sf.read(f, dtype="float32")[0] ** 2).mean()) + 1e-12)
+            ratio = rms(out / "lead.wav") / rms(out / "vocals.wav")
+            if ratio > 0.3:
+                src = out / "lead.wav"
+            else:  # karaoke model swallowed the lead (e.g. unusual voice): keep all vocals
+                log(f"lead track nearly silent ({ratio:.2f}); using all vocals")
+    track_pitch.src = src
     wav, sr = sf.read(src, dtype="float32", always_2d=True)
     mono = wav.mean(1)
     audio16 = resample_poly(mono, 16000, sr).astype(np.float32)
@@ -246,6 +248,45 @@ def to_notes(midi, smooth_s=0.15, hyst=0.8, min_note_s=0.12):
         if (e - s) >= min_len
     ]
     return notes, float(tune)
+
+
+def fill_from(base, extra):
+    """base + the notes of extra sung where base has (almost) nothing. Returns (notes, added)."""
+    ov = lambda a, b: max(0.0, min(a["t"] + a["d"], b["t"] + b["d"]) - max(a["t"], b["t"]))
+    add = [n for n in extra if sum(ov(n, b) for b in base) < 0.3 * n["d"]]
+    return sorted(base + add, key=lambda n: n["t"]), len(add)
+
+
+def drop_spoken(notes, lyrics):
+    """No targets under spoken lines (on-screen lyrics mark them; 2026-11-24: These Palace Walls'
+    spoken intro had become 26 'notes' the user had to delete)."""
+    spans = []
+    for k, l in enumerate(lyrics):
+        if l.get("spoken") and l.get("t") is not None:
+            nxt = next((x["t"] for x in lyrics[k + 1:] if x.get("t") is not None), l["t"] + 6)
+            spans.append((l["t"] - 0.2, nxt - 0.1))
+    keep = [n for n in notes if not any(a <= n["t"] + n["d"] / 2 < b for a, b in spans)]
+    return keep, len(notes) - len(keep)
+
+
+def split_at_words(notes, segs, midi, tune, min_piece=0.12):
+    """A target spanning the start of another sung word is two targets: each word (syllable) gets
+    its own note, with its own pitch (2026-11-24: the user re-typed quick lines that smoothing had
+    run together, e.g. three words sung as one 0.9 s note)."""
+    starts = sorted(w["t"] for s in segs for w in s["words"])
+    out = []
+    for n in notes:
+        a, b = n["t"], n["t"] + n["d"]
+        cuts = [t for t in starts if a + min_piece <= t <= b - min_piece]
+        edges = [a] + cuts + [b]
+        for s, e in zip(edges, edges[1:]):
+            i, j = int(s / HOP_S), int(e / HOP_S)
+            cut = int((j - i) * 0.2)
+            seg = midi[i + cut:j - cut] - tune
+            seg = seg[~np.isnan(seg)]
+            p = int(round(float(np.median(seg)))) if len(seg) >= 3 else n["p"]
+            out.append({"t": round(s, 3), "d": round(e - s, 3), "p": p})
+    return out
 
 
 def _syllables(w):
@@ -861,6 +902,13 @@ def pack(title, out, notes, phrases, tune, kind="vocal"):
     }
     if kind == "vocal":
         meta["lyrics"], meta["lyricsCheck"] = make_lyrics(title, out / "vocals.wav", notes)
+        kept, spoken = drop_spoken(notes, meta["lyrics"])
+        if spoken:
+            log(f"spoken lines: {spoken} notes removed (speech is not a tune to match)")
+            notes[:] = kept
+            meta["phrases"] = to_phrases(notes)
+            ps = [n["p"] for n in notes]
+            meta["range"] = [int(np.percentile(ps, 3)), int(np.percentile(ps, 97))] if ps else [60, 72]
     else:  # no singing to check against -> no lyrics (add them by hand in the app's 📝 dialog)
         meta["lyrics"], meta["lyricsCheck"] = [], {"source": "none", "reason": "instrumental: nothing sung to verify against"}
     meta["lyricsTried"] = True
@@ -892,6 +940,14 @@ def prep(src, force_kind=None):
         isolate_lead(out)
         log("tracking sung melody...")
         notes, tune = to_notes(track_pitch(out))
+        if track_pitch.src.name == "lead.wav":
+            # other singers' lines: the karaoke model keeps one lead voice, so in a duet or a cast
+            # song the other singers' lines vanish (2026-11-24: the user re-typed ~45 notes of
+            # These Palace Walls). Where the lead is silent, take the notes heard in all vocals.
+            # Scored with tools\eval_notes.py vs the user's repairs: found 47% -> 67% of notes.
+            allv, _ = to_notes(track_pitch(out, out / "vocals.wav"))
+            notes, filled = fill_from(notes, allv)
+            log(f"other singers: {filled} notes added where the lead singer is silent")
         try:  # fold melisma runs into plain notes (needs the sung words' times)
             notes, folded = simplify_melisma(notes, transcribe(out / "vocals.wav", notes))
             log(f"melisma smoothed: {folded} ornament notes folded, {len(notes)} notes left")

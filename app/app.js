@@ -1,8 +1,8 @@
 // ?v= stamps are rewritten by publish.ps1 so every publish loads fresh files past GitHub's CDN cache
-import { readZip, writeZip } from './zip.js?v=202611241329';
-import * as db from './db.js?v=202611241329';
-import { detectPitch } from './pitch.js?v=202611241329';
-import { framesToNotes, placeOctave, toPhrases, noteRange } from './melody.js?v=202611241329';
+import { readZip, writeZip } from './zip.js?v=202611241406';
+import * as db from './db.js?v=202611241406';
+import { detectPitch } from './pitch.js?v=202611241406';
+import { framesToNotes, placeOctave, toPhrases, noteRange } from './melody.js?v=202611241406';
 
 const $ = s => document.querySelector(s);
 const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
@@ -365,7 +365,8 @@ async function openSong(id, opts = {}) {
   gV.gain.value = guideStale ? 0 : settings.guide;
   S = {
     song, meta: m, notes: m.notes, phrases: m.phrases, backing, vocals, gB, gV, nodes: [nB, nV, gB, gV],
-    lo: m.range[0] - 3, hi: m.range[1] + 3, rate: 1, trail: [], pops: [], running: false,
+    // every note on screen, even one moved an octave away (the range field skips the outer 3%)
+    lo: Math.min(m.range[0], ...m.notes.map(n => n.p)) - 3, hi: Math.max(m.range[1], ...m.notes.map(n => n.p)) + 3, rate: 1, trail: [], pops: [], running: false,
     mode: 'song', queue: [], qi: 0, attempts: [], passes: 0, guideStale,
   };
   S.trace = traceFor(song);
@@ -536,8 +537,19 @@ function checkHits(n) {
   const ck = S.meta.check?.notes || [];
   return ck.filter(c => c.t < n.t + n.d && c.t + c.d > n.t);
 }
+// spoken lyric lines (on-screen lyrics mark them): speech there is not a missing note
+function spokenSpans() {
+  const ly = S.meta.lyrics || [], out = [];
+  ly.forEach((l, k) => {
+    if (!l.spoken || l.t == null) return;
+    const nxt = ly.slice(k + 1).find(x => x.t != null)?.t ?? l.t + 6;
+    out.push([l.t - 0.2, nxt - 0.1]);
+  });
+  return out;
+}
 function checkFlags() {
-  const ck = S.meta.check?.notes;
+  const sp = spokenSpans();
+  const ck = S.meta.check?.notes?.filter(c => !sp.some(([a, b]) => c.t + c.d / 2 >= a && c.t + c.d / 2 < b));
   if (!ck?.length) return [];
   const out = [];
   S.notes.forEach((n, i) => {
@@ -642,7 +654,18 @@ $('#edPrev').onclick = () => S?.edit && edSelect((S.sel ?? 1) - 1);
 $('#edNext').onclick = () => S?.edit && edSelect((S.sel ?? -1) + 1);
 $('#edUp').onclick = () => edApply(n => { n.p += 1; beep(n.p); });
 $('#edDown').onclick = () => edApply(n => { n.p -= 1; beep(n.p); });
-$('#edLeft').onclick = () => edApply(n => { n.t = +Math.max(0, n.t - 0.05).toFixed(3); });
+// octave shift (user, 2026-11-24: "I need better octave control... The "Hear Notes" option throws
+// notes in the wrong octave lots ... Maybe give up/down arrows for octave shifting"). Scoring ignores
+// octaves; this sets the octave "Hear notes" plays and where the note is drawn.
+function edOctave(k) {
+  edApply(n => {
+    n.p += 12 * k; beep(n.p);
+    S.lo = Math.min(S.lo, n.p - 3); S.hi = Math.max(S.hi, n.p + 3); // keep it on screen
+  });
+}
+$('#edOctUp').onclick = () => edOctave(1);
+$('#edOctDown').onclick = () => edOctave(-1);
+$('#edLeft').onclick =() => edApply(n => { n.t = +Math.max(0, n.t - 0.05).toFixed(3); });
 $('#edRight').onclick = () => edApply(n => { n.t = +(n.t + 0.05).toFixed(3); });
 $('#edMine').onclick = () => {
   if (S?.live == null) { toast('Sing the note (music paused), then tap 🎤 again'); return; }
@@ -1445,7 +1468,7 @@ function releaseWake() { wake?.release().catch(() => {}); wake = null; }
 
 // ---------- boot ----------
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
-  navigator.serviceWorker.register('sw.js?v=202611241329', { updateViaCache: 'none' });
+  navigator.serviceWorker.register('sw.js?v=202611241406', { updateViaCache: 'none' });
   // new version installed -> reload once, but never in the middle of a song
   const hadController = !!navigator.serviceWorker.controller;
   navigator.serviceWorker.addEventListener('controllerchange', () => {

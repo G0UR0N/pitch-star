@@ -1,8 +1,8 @@
 // ?v= stamps are rewritten by publish.ps1 so every publish loads fresh files past GitHub's CDN cache
-import { readZip, writeZip } from './zip.js?v=202611232241';
-import * as db from './db.js?v=202611232241';
-import { detectPitch } from './pitch.js?v=202611232241';
-import { framesToNotes, placeOctave, toPhrases, noteRange } from './melody.js?v=202611232241';
+import { readZip, writeZip } from './zip.js?v=202611232326';
+import * as db from './db.js?v=202611232326';
+import { detectPitch } from './pitch.js?v=202611232326';
+import { framesToNotes, placeOctave, toPhrases, noteRange } from './melody.js?v=202611232326';
 
 const $ = s => document.querySelector(s);
 const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
@@ -98,13 +98,13 @@ async function renderLibrary() {
   }
   for (const s of songs) {
     const el = document.createElement('div'); el.className = 'card song';
-    el.innerHTML = `<div class="meta"><b></b><small class="desc"></small><small>${fmtTime(s.meta.duration)} · ${s.meta.phrases.length} sections${best[s.id] != null ? ` · best ${best[s.id]}` : ''}${s.meta.edited ? ' · ✎ own melody' : ''}</small><button class="chip" data-a="folder"></button>${s.meta.lyricsCheck?.stale ? '<button class="btn small warn" data-a="readd">⚠ Lyrics need an update: tap, then pick this song from Drive</button>' : ''}</div>
+    el.innerHTML = `<div class="meta"><b></b><small class="desc"></small><small>${s.meta.start ? `${fmtTime(s.meta.start)}–` : ''}${fmtTime(s.meta.duration)} · ${s.meta.phrases.length} sections${best[s.id] != null ? ` · best ${best[s.id]}` : ''}${s.meta.edited ? ' · ✎ own melody' : ''}</small><button class="chip" data-a="folder"></button>${s.meta.lyricsCheck?.stale ? '<button class="btn small warn" data-a="readd">⚠ Lyrics need an update: tap, then pick this song from Drive</button>' : ''}</div>
       <div class="actions">
         <button class="btn primary small" data-a="sing">▶ Sing</button>
         <button class="icon" data-a="edit" title="Rename" aria-label="Rename">✏️</button>
         <button class="icon" data-a="ly" title="Lyrics" aria-label="Lyrics">📝</button>
         <button class="icon" data-a="rec" title="Record melody" aria-label="Record melody">🎙️</button>
-        <button class="icon" data-a="trim" title="Trim song end" aria-label="Trim">✂️</button>
+        <button class="icon" data-a="trim" title="Trim the start or end" aria-label="Trim">✂️</button>
         <button class="icon" data-a="exp" title="Export song file" aria-label="Export">⤓</button>
         <button class="icon" data-a="del" title="Remove" aria-label="Delete">🗑️</button>
       </div>`;
@@ -335,7 +335,7 @@ async function openSong(id, opts = {}) {
   if (opts.sync) startSync();
   else if (opts.record) startRecord();
   else if (opts.practice) startPractice(opts.practice);
-  else { S.mode = 'song'; $('#practicePanel').hidden = true; $('#playSub').textContent = m.lyricsCheck?.stale ? 'Full song · no lyrics until re-added from Drive' : 'Full song'; seek(0); }
+  else { S.mode = 'song'; $('#practicePanel').hidden = true; $('#playSub').textContent = m.lyricsCheck?.stale ? 'Full song · no lyrics until re-added from Drive' : 'Full song'; seek(m.start || 0); }
   show('play'); resize();
   requestAnimationFrame(tick);
 }
@@ -805,21 +805,30 @@ $('#btnRecKeep').onclick = async () => {
   openSong(id, sel >= 0 ? { practice: { queue: [Math.min(sel, song.meta.phrases.length - 1)], fromResults: false }, hearNotes: true } : { hearNotes: true });
 };
 
-// ---------- trim: end the song early (drops notes/sections/lyrics after it) ----------
+// ---------- trim: skip a slow start and/or end the song early ----------
+// (start: user, 2026-11-23: "I would like the option to trim off slow starts from songs as well")
+// The audio isn't cut: the song plays from meta.start and stops at meta.duration; notes,
+// sections and lyrics outside that stretch are dropped. Times stay song times.
 async function trimSong(id) {
-  const s = await db.getSong(id), cur = fmtTime(s.meta.duration);
-  const v = prompt(`End "${songName(s)}" at (m:ss)? Now ends at ${cur}.`, cur);
+  const s = await db.getSong(id), st = s.meta.start || 0;
+  const sing = s.meta.notes[0]?.t ?? 0; // first sung note
+  const v = prompt(`Trim "${songName(s)}": start - end (m:ss - m:ss).\n` +
+    `Singing starts at ${fmtTime(sing)}. To skip a slow start, try ${fmtTime(Math.max(0, sing - 3))} as the start.`,
+    `${fmtTime(st)} - ${fmtTime(s.meta.duration)}`);
   if (!v) return;
-  const m = v.trim().match(/^(\d+):(\d{1,2})$/);
-  if (!m) { toast('Use m:ss, like 3:18'); return; }
-  const end = +m[1] * 60 + +m[2];
-  if (end < 5 || end > s.meta.duration) { toast('That time is outside the song'); return; }
-  const notes = s.meta.notes.filter(n => n.t < end)
+  const tm = '(\\d+):(\\d{1,2})';
+  const m = v.trim().match(new RegExp(`^(?:${tm}\\s*-\\s*)?${tm}$`));
+  if (!m) { toast('Use start - end, like 0:12 - 3:18'); return; }
+  const start = m[1] != null ? +m[1] * 60 + +m[2] : st, end = +m[3] * 60 + +m[4];
+  if (end > s.meta.duration + 0.5 || start < 0 || end - start < 5) { toast('That time is outside the song'); return; }
+  if (start < st - 0.5) { toast(`The start can't go back before ${fmtTime(st)} — re-add the song from Drive to undo`); return; }
+  const notes = s.meta.notes.filter(n => n.t >= start && n.t < end)
     .map(n => (n.t + n.d > end ? { ...n, d: +(end - n.t).toFixed(3) } : n)).filter(n => n.d >= 0.08);
-  s.meta = { ...s.meta, duration: end, notes, phrases: toPhrases(notes), range: noteRange(notes),
-    lyrics: (s.meta.lyrics || []).filter(l => l.t == null || l.t < end) };
+  if (!notes.length) { toast('No singing left between those times'); return; }
+  s.meta = { ...s.meta, start: start || undefined, duration: Math.min(end, s.meta.duration), notes, phrases: toPhrases(notes),
+    range: noteRange(notes), lyrics: (s.meta.lyrics || []).filter(l => l.t == null || (l.t >= start - 1 && l.t < end)) };
   await db.putSong(s);
-  toast(`Song now ends at ${fmtTime(end)} ✓`);
+  toast(`Song now plays ${fmtTime(start)} – ${fmtTime(end)} ✓`);
   renderLibrary();
 }
 
@@ -982,7 +991,7 @@ function startSync() {
   $('#practicePanel').hidden = false; $('#syncPanel').hidden = false;
   $('#playSub').textContent = 'Tap to sync lyrics';
   updateSyncUI();
-  seek(0);
+  seek(S.meta.start || 0);
 }
 function updateSyncUI() {
   const ly = S.meta.lyrics, i = S.sync.i;
@@ -1083,7 +1092,7 @@ function releaseWake() { wake?.release().catch(() => {}); wake = null; }
 
 // ---------- boot ----------
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
-  navigator.serviceWorker.register('sw.js?v=202611232241', { updateViaCache: 'none' });
+  navigator.serviceWorker.register('sw.js?v=202611232326', { updateViaCache: 'none' });
   // new version installed -> reload once, but never in the middle of a song
   const hadController = !!navigator.serviceWorker.controller;
   navigator.serviceWorker.addEventListener('controllerchange', () => {

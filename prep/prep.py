@@ -243,6 +243,63 @@ def to_notes(midi, smooth_s=0.15, hyst=0.8, min_note_s=0.12):
     return notes, float(tune)
 
 
+def _syllables(w):
+    w = re.sub(r"[^a-z]", "", w.lower())
+    n = len(re.findall(r"[aeiouy]+", w))
+    if n > 1 and w.endswith("e") and not w.endswith(("le", "ee")):
+        n -= 1  # silent e ("place")
+    return max(1, n)
+
+
+def simplify_melisma(notes, segs):
+    """Melisma off (user, 2026-11-23: "smooth out the expected notes as she sings with a bit of
+    melisma which I don't want to impose on my daughter"). In a sung word, the longest notes (one
+    per syllable) and every note held >= 0.35 s are the tune; the other quick notes (scoops,
+    runs, turns) fold into the kept note before them (or after, if they come first). Uses Whisper's word times; a
+    note after a rest (> 0.3 s) is never folded. Returns (notes, number of notes folded)."""
+    words = [w for s in segs for w in s["words"]]
+    words.sort(key=lambda w: w["t"])
+    drop = set()
+    for k, w in enumerate(words):
+        end = words[k + 1]["t"] - 0.1 if k + 1 < len(words) else w["e"] + 1.5
+        end = min(end, w["e"] + 2.0)  # a held last word, but not across a long gap
+        ns = [i for i, n in enumerate(notes) if w["t"] - 0.1 <= n["t"] < end and i not in drop]
+        syl = _syllables(w["w"])
+        if len(ns) <= syl:
+            continue
+        # the held notes are the tune; short scoops and turns around them are ornaments
+        # (2026-11-23: keeping the first note kept a 0.13 s scoop instead of the held note)
+        # a note held >= 0.35 s is a real note, never an ornament ("a-WAY": F4 0.6 s, A#3 2 s)
+        keep = set(sorted(ns, key=lambda i: -notes[i]["d"])[:syl]) | {i for i in ns if notes[i]["d"] >= 0.35}
+        # split the word's notes into legato groups (a rest > 0.3 s starts a new group)
+        groups, g = [], [ns[0]]
+        for i in ns[1:]:
+            if notes[i]["t"] - (notes[g[-1]]["t"] + notes[g[-1]]["d"]) > 0.3:
+                groups.append(g); g = [i]
+            else:
+                g.append(i)
+        groups.append(g)
+        for g in groups:
+            ks = [i for i in g if i in keep] or [max(g, key=lambda i: notes[i]["d"])]
+            for i in g:
+                if i in ks:
+                    continue
+                # fold into the kept note before it, or the first kept note if it comes before all
+                tgt = max((k for k in ks if k < i), default=ks[0])
+                a = min(notes[tgt]["t"], notes[i]["t"])
+                b = max(notes[tgt]["t"] + notes[tgt]["d"], notes[i]["t"] + notes[i]["d"])
+                notes[tgt]["t"], notes[tgt]["d"] = round(a, 3), round(b - a, 3)
+                drop.add(i)
+            # kept notes of the same pitch one after another in the word become one held note
+            ks.sort()
+            for x, y in zip(ks, ks[1:]):
+                if x not in drop and notes[x]["p"] == notes[y]["p"]:
+                    notes[y]["d"] = round(notes[y]["t"] + notes[y]["d"] - notes[x]["t"], 3)
+                    notes[y]["t"] = notes[x]["t"]
+                    drop.add(x)
+    return [n for i, n in enumerate(notes) if i not in drop], len(drop)
+
+
 # ---------- 3b. instrumental: transcribe piano, keep the top line ----------
 PIANO_CKPT_URL = "https://zenodo.org/record/4034264/files/CRNN_note_F1%3D0.9677_pedal_F1%3D0.9186.pth?download=1"
 
@@ -377,6 +434,7 @@ LYRIC_AGREE = 0.5    # share of heard words a published version must match to be
 # lyrics ship only if a published version matches > 95% of the heard words AND the lyric
 # lines cover > 95% of the sung time (strictly greater, as worded). Otherwise the pack ships with no lyrics.
 LYRIC_SHIP = 0.95
+VOCALISE = r"(o+h*|a+h+|m+|h+m+|hm+|u+h+|o+o+h*|w*o+a*h*|la|na|da|ah+)"  # wordless sounds
 
 
 _NUM = dict(enumerate("zero one two three four five six seven eight nine ten eleven twelve".split()))
@@ -565,11 +623,18 @@ def lyric_coverage(spans, notes):
 def make_lyrics(title, vocals_wav, notes=None):
     """Verified lyrics for a sung recording: (lines, check-info). Never raises.
     Ships only at > LYRIC_SHIP certainty, else no lyrics (see LYRIC_SHIP)."""
+    make_lyrics.vocalise = []
     lines, info = _make_lyrics(title, vocals_wav, notes)
     spans, pub, counts, bad = (info.pop(k, d) for k, d in
                                (("spans", []), ("pub", None), ("counts", None), ("bad", [])))
+    if notes and make_lyrics.vocalise:  # wordless singing: no lyrics expected there
+        notes = [n for n in notes if not any(a - 0.5 <= n["t"] <= b + 0.5 for a, b in make_lyrics.vocalise)]
+        info["vocalise"] = [[round(a, 1), round(b, 1)] for a, b in make_lyrics.vocalise]
     if not lines:
         return lines, info
+    if pub and counts and info["source"] == "heard+published":
+        lines, counts, spans, bad, notes = fill_slots(lines, pub, counts, spans, bad, notes, info)
+        info["lines"] = len(lines)
     cov = lyric_coverage(spans, notes)
     info["coverage"] = round(cov, 3)  # 3 places so the app's "> 95%" check sees e.g. 0.953, not 0.95
     sure = info["source"] == "heard+published" and info["agree"] > LYRIC_SHIP and cov > LYRIC_SHIP
@@ -585,6 +650,64 @@ def make_lyrics(title, vocals_wav, notes=None):
         return [], out
     log(f"lyrics: shipped, match {info['agree']:.0%}, sung time covered {cov:.0%}")
     return [{k: v for k, v in l.items() if k != "i"} for l in lines], info
+
+
+LYRIC_SLOT = 0.5  # word match needed when the published order pins the line's place
+
+
+def fill_slots(lines, pub, counts, spans, bad, notes, info):
+    """Use the published line order (2026-11-23, Faith Hill's Where Are You Christmas):
+    1. A heard line no published line confirms, sitting between two confirmed lines whose
+       published lines in between (1-3) are missing, is that missing text when >= LYRIC_SLOT
+       of its words match ("Build a future in every heart with love" = "Fills each and every
+       heart / With love").
+    2. Sung time with no line, where the published order has no missing line (before the first
+       line, between two consecutive lines, after the last), is wordless (ad-libs, held "oh"s):
+       it is left out of the sung time the lyrics must cover.
+    Returns (lines, counts, spans, bad, notes)."""
+    from difflib import SequenceMatcher
+    lines = sorted((dict(l) for l in lines), key=lambda l: l["t"])
+    last = -1  # repeated lines (a chorus) match their first copy: move them on in order
+    for l in lines:
+        if "i" in l and l["i"] <= last:
+            nxt = next((j for j in range(last + 1, len(pub)) if pub[j] == pub[l["i"]]), None)
+            if nxt is not None:
+                l["i"] = nxt
+        last = max(last, l.get("i", last))
+
+    def slot(t):
+        prev = max((l for l in lines if l["t"] < t and "i" in l), key=lambda l: l["t"], default=None)
+        nxt = min((l for l in lines if l["t"] > t and "i" in l), key=lambda l: l["t"], default=None)
+        return (prev["i"] + 1 if prev else 0), (nxt["i"] if nxt else len(pub))
+
+    matched, total = counts
+    spans, keep_bad, filled = list(spans), [], 0
+    for s in bad:
+        a, b = slot(s["t"])
+        heard = _words(s["text"])
+        miss = pub[a:b]
+        r = SequenceMatcher(None, heard, [w for x in miss for w in _words(x)], autojunk=False).ratio() if miss else 0
+        if 1 <= len(miss) <= 3 and r >= LYRIC_SLOT:
+            ws = s["words"]
+            for k, text in enumerate(miss):
+                lines.append({"t": ws[min(len(ws) - 1, k * len(ws) // len(miss))]["t"], "text": text, "i": a + k})
+            matched += len(heard)
+            spans.append((ws[0]["t"], max(w.get("e", w["t"]) for w in ws)))
+            filled += 1
+            log(f"lyrics: {s['t']:.1f} s '{s['text']}' fills the missing published line(s) {miss} ({r:.0%})")
+        else:
+            keep_bad.append(s)
+    lines.sort(key=lambda l: l["t"])
+    inside = lambda t: any(a - 1.0 <= t <= b + 1.0 for a, b in spans)
+    wordless = [n for n in notes if not inside(n["t"]) and (lambda ab: ab[0] >= ab[1])(slot(n["t"]))]
+    if wordless:
+        notes = [n for n in notes if n not in wordless]
+        log(f"lyrics: {sum(n['d'] for n in wordless):.1f} s of singing has no missing published line (wordless), not counted")
+    if filled or wordless:
+        info["unconfirmed"] = [f"{s['t']:.1f} {s['text']}" for s in keep_bad]
+        info["agree"] = round(matched / max(total, 1), 2)
+        info["slotFilled"], info["wordless"] = filled, round(sum(n["d"] for n in wordless), 1)
+    return lines, (matched, total), spans, keep_bad, notes
 
 
 # Human answers for rough parts, kept in the songs folder (Drive; not in the public repo:
@@ -662,6 +785,11 @@ def _make_lyrics(title, vocals_wav, notes=None):
     except Exception as e:
         log(f"lyrics: transcription failed ({e}); no lyrics shipped")
         return [], {"source": "none", "reason": f"transcription failed: {e}"}
+    # Wordless singing ("Hmm, hmm", "Ooooh", 2026-11-23 Faith Hill) has no lyrics to check:
+    # those stretches are left out of the match and of the sung time the lyrics must cover.
+    voc = [s for s in segs if all(re.fullmatch(VOCALISE, w) for w in _words(s["text"]))]
+    segs = [s for s in segs if s not in voc]
+    make_lyrics.vocalise = [(s["words"][0]["t"], max(w.get("e", w["t"]) for w in s["words"])) for s in voc]
     heard = sum(len(_words(s["text"])) for s in segs)  # the 90% ship gate judges quality
     if heard < 15:
         log("lyrics: too few clear words heard; no lyrics shipped")
@@ -752,6 +880,11 @@ def prep(src, force_kind=None):
         isolate_lead(out)
         log("tracking sung melody...")
         notes, tune = to_notes(track_pitch(out))
+        try:  # fold melisma runs into plain notes (needs the sung words' times)
+            notes, folded = simplify_melisma(notes, transcribe(out / "vocals.wav", notes))
+            log(f"melisma smoothed: {folded} ornament notes folded, {len(notes)} notes left")
+        except Exception as e:
+            log(f"melisma smoothing skipped ({e})")
     else:
         log("no singer found -> transcribing the instrument melody (top line)...")
         notes, tune = transcribe_melody(out), 0.0

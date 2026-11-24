@@ -9,6 +9,10 @@ Karaoke pitch-training game. PC preps songs; game runs in a browser (phone or PC
 
 Batch: `prep\prep.bat <link1> <link2> ...`
 
+Melisma is smoothed out (user, 2026-11-23: "smooth out the expected notes as she sings with a bit of melisma which I don't want to impose on my daughter"): using the heard word times, each sung word keeps at most one note per syllable (its first note plus the longest others); runs and turns fold into the note before them. A note after a rest of more than 0.3 s is never folded. Prep logs how many notes were folded.
+
+Check a pack's key: `tools\song_key.py <file.song>` estimates it from the notes and from the backing music; the two should agree, so the notes match the recording.
+
 No singer (piano/instrumental)? Detected automatically: the melody is transcribed from the top line of the instrument, and a soft tone melody becomes the "guide voice". Force a mode with `--instrumental` or `--vocal`. Best sources: a version with a singer, or a piano version that plays the melody (accompaniment-only tracks may not contain it). Check with **Hear notes**.
 
 Tools live in `%USERPROFILE%\PitchScoreGameTools` (Python env, ffmpeg, uv). Not synced to OneDrive.
@@ -32,9 +36,10 @@ Best on the PC in Chrome/Edge (open the game URL), headphones on.
 3. Pink bars = what was heard. **Listen** plays them as tones over the music. **Keep** / **Retry** / **Discard**.
 4. **⤓ Export** saves the fixed `.song`. On PC, pick `G:\My Drive\PitchStar` (replace the old file). On the phone, remove the old copy and **Add songs** again.
 
-## Trim a song
-- In the app: ✂️ on the song → type the new end (m:ss). Export (⤓) to keep it in Drive.
-- On the PC: `tools\trim_song.py "<file.song>" 3:18` (venv python) trims the file itself, audio included.
+## Trim a song (slow start and/or end)
+Start trim: user, 2026-11-23: "I would like the option to trim off slow starts from songs as well".
+- In the app: ✂️ on the song → type `start - end`, e.g. `0:27 - 3:18` (an end alone still works). The box says when the singing starts and suggests a start 3 s before it. The song then plays from the start; the card shows "0:27–3:18". The audio isn't cut, so a start can only move later. To undo, re-add the song from Drive. Export (⤓) to keep it in Drive.
+- On the PC: `tools\trim_song.py "<file.song>" 0:27-3:18` (or just `3:18`) trims the file itself. It cuts both audio tracks, shifts every note and lyric time so the song begins at 0, and records the cut in `trimmedStart`.
 
 ## Song list: names and folders
 - Cards show a short name (e.g. "Jingle Bells"). It comes from the video title when that contains the published title of the verified lyrics, otherwise from the published title, and with no published title from the video title alone: the part before the first "|", and in "Artist - Title" the part after the dash, unless that part is only a description such as "Piano accompaniment". The song name is always the bold line (user, 2026-11-22). The rest of the title (artist, source) is shown as subtext.
@@ -62,7 +67,13 @@ Best on the PC in Chrome/Edge (open the game URL), headphones on.
 - **Lyrics from the video's own slides, with singer parts** (user, 2026-11-23: "Can you use screen snips from the video to derive the lyrics? There are several parts/singers for this and it would be nice of the lyrics tracked that"). `tools\video_frames.py <url> <folder>` saves one frame per second; `tools\slide_changes.py <folder>` lists each distinct slide. The slides are read by eye (per-line confidence > 90%) into `G:\My Drive\PitchStar\lyrics_onscreen.json`, keyed by video title: `{text, who, spoken}` per line. Prep and `lyrics_check` try them first and verify them against the singing like any published version (same 95% gate). Lines keep `who` and `spoken`; the play screen shows the singer as a coloured tag (one colour per name, grey for All) and spoken lines in italics. First use: These Palace Walls (Aladdin Jr.), 23 lines, match 100%, coverage 100%. The slide's last line "Something waits behind these palace walls" is not in the lead vocal, so it is left out.
 - JSON files in the songs folder are read with `utf-8-sig`: a file saved by a Windows tool starts with a BOM, and plain `utf-8` silently skipped the on-screen lyrics (2026-11-23).
 - Tried and dropped (2026-11-23): re-listening to unconfirmed lines on their own. It fixed nothing and pushed It's Beginning to Look… below the gate.
-- Known gap: belted or unclear singing isn't recognised. Waiting on a human answer (2026-11-23): Two Front Teeth (match 92%, coverage 94%; 1 part, 1:13.6–1:17.1); Where Are You Christmas, sung (match 67%, coverage 83%; 2 parts, 1:50–1:58 and 2:01–2:18).
+- **The published line order settles parts with no human** (2026-11-23, Faith Hill's Where Are You Christmas):
+  - A heard line no published line confirms, sitting between two confirmed lines where 1–3 published lines are missing, is that text when ≥ 50% of its words match ("Build a future in every heart with love" = "Fills each and every heart / With love").
+  - Sung time where the published order has no missing line (before the first line, between two consecutive lines, after the last) is wordless (ad-libs, held "oh"s) and is not counted.
+  - Wordless sounds Whisper hears ("Hmm", "Ooooh", "Oh") are not lyrics either. Their segments are left out of the match, and their notes out of the sung time.
+  - Repeated lines (a chorus) are counted in order, so a repeat isn't mistaken for the first copy.
+- Known gap: belted or unclear singing isn't recognised. Waiting on a human answer (2026-11-23): Two Front Teeth (match 92%, coverage 94%; 1 part, 1:13.6–1:17.1).
+- Where Are You Christmas: only Faith Hill's original version is kept (user, 2026-11-23: "remove the other attempts at this song so that our library only holds this copy"). The piano and Taylor Momsen packs went to the Recycle Bin. Faith Hill: F major (matches the backing music; same key as the old piano version), match 100%, coverage 100% (19.8 s wordless), 127 melisma notes folded, 216 left.
 - Copies checked before the 90% gate (no `coverage` in `lyricsCheck`) are also treated as old by the app and need re-adding.
 - Karaoke line under the notes: words light up with the melody; next line shown dim. **Lyrics** checkbox on the play screen turns them on/off.
 - If the timing is off: 📝 → **Save + tap to sync**, then tap (or Space) as each line starts. 📝 → **Find** picks a different version.

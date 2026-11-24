@@ -1,8 +1,8 @@
 // ?v= stamps are rewritten by publish.ps1 so every publish loads fresh files past GitHub's CDN cache
-import { readZip, writeZip } from './zip.js?v=202611241408';
-import * as db from './db.js?v=202611241408';
-import { detectPitch } from './pitch.js?v=202611241408';
-import { framesToNotes, placeOctave, toPhrases, noteRange } from './melody.js?v=202611241408';
+import { readZip, writeZip } from './zip.js?v=202611241410';
+import * as db from './db.js?v=202611241410';
+import { detectPitch } from './pitch.js?v=202611241410';
+import { framesToNotes, placeOctave, toPhrases, noteRange } from './melody.js?v=202611241410';
 
 const $ = s => document.querySelector(s);
 const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
@@ -366,7 +366,8 @@ async function openSong(id, opts = {}) {
   S = {
     song, meta: m, notes: m.notes, phrases: m.phrases, backing, vocals, gB, gV, nodes: [nB, nV, gB, gV],
     // every note on screen, even one moved an octave away (the range field skips the outer 3%)
-    lo: Math.min(m.range[0], ...m.notes.map(n => n.p)) - 4, hi: Math.max(m.range[1], ...m.notes.map(n => n.p)) + 4, rate: 1, trail: [], pops: [], running: false,
+    // the view = the song's lowest to highest note (+2 semitones so edge bars aren't cut)
+    lo: Math.min(...m.notes.map(n => n.p), m.range[0]) - 2, hi: Math.max(...m.notes.map(n => n.p), m.range[1]) + 2, rate: 1, trail: [], pops: [], running: false,
     mode: 'song', queue: [], qi: 0, attempts: [], passes: 0, guideStale,
   };
   S.trace = traceFor(song);
@@ -758,12 +759,13 @@ function noteIndexAt(ts, advance = true) {
   if (advance) S.ni = i;
   return i < S.notes.length && S.notes[i].t <= ts ? i : -1;
 }
-// Where a sung pitch is drawn (and where 🎤 / ＋ put a note): its true pitch whenever it fits in the
-// view, which spans the whole song (user, 2026-11-24: "preferably the whole songs range is in view
-// ... such that the pitch markers are positionally correct for the notes the represent. I don't want
-// to go lower and see my pitch marker jump to the top of the screen"). Only a voice outside the
-// song's range (e.g. a child singing a man's part) is moved by octaves next to the target r.
-const placePitch = (m, r) => (S && m >= S.lo && m <= S.hi) ? m : m - 12 * Math.round((m - r) / 12);
+// Where a sung pitch is drawn (and where 🎤 / ＋ put a note): always its true pitch, never moved by
+// octaves (user, 2026-11-24: "the pitch markers are positionally correct for the notes the
+// represent. I don't want to go lower and see my pitch marker jump to the top of the screen" and
+// "there should be no out of range voices, thus no shifted octave views. Make the highest and lowest
+// notes of the song determine the view"; folding options only if a song's range zooms out too far).
+// A voice outside the view sits at the edge with an arrow (edgeDot). Scoring still ignores octaves.
+const placePitch = m => m;
 const foldCents = (m, p) =>((((m - p) % 12) + 18) % 12 - 6) * 100;
 
 function inLoop(i) { return S.mode === 'song' || (S.mode === 'practice' && i >= S.loop.a && i < S.loop.b); }
@@ -917,6 +919,17 @@ function draw(t, ts) {
   // voice trail (true pitch when it fits the view, see placePitch)
   const ref = tt => { const i = S.notes.findIndex((n, k) => k >= S.ni - 2 && n.t + n.d >= tt); const n = S.notes[i >= 0 ? i : S.notes.length - 1]; return n ? n.p : (S.lo + S.hi) / 2; };
   const fold = placePitch;
+  // the live dot; a voice above / below the song's range sits at the edge with an arrow pointing out
+  const edgeDot = (px, py, rad) => {
+    const lo = rad + 2 * dpr, hi = H - rad - 2 * dpr, out = py < lo ? -1 : py > hi ? 1 : 0;
+    py = Math.min(hi, Math.max(lo, py));
+    g.fillStyle = css('--accent'); g.beginPath(); g.arc(px, py, rad, 0, 7); g.fill();
+    if (out) {
+      g.fillStyle = '#fff'; g.font = `bold ${12 * dpr}px system-ui`; g.textAlign = 'center';
+      g.fillText(out < 0 ? '⇡' : '⇣', px, py + 1 * dpr); g.textAlign = 'start';
+    }
+    return py;
+  };
   g.lineWidth = 3 * dpr; g.strokeStyle = css('--accent'); g.lineCap = 'round';
   g.beginPath(); let pen = false, last = null;
   for (const p of S.trail) {
@@ -929,8 +942,7 @@ function draw(t, ts) {
   g.stroke();
   const cur = S.trail[S.trail.length - 1];
   if (S.running && cur?.m != null) {
-    const r = ref(cur.t), fm = fold(cur.m, r), px = x(cur.t), py = y(fm);
-    g.fillStyle = css('--accent'); g.beginPath(); g.arc(px, py, 7 * dpr, 0, 7); g.fill();
+    const r = ref(cur.t), fm = fold(cur.m, r), px = x(cur.t), py = edgeDot(px, y(fm), 7 * dpr);
     const i = noteIndexAt(ts, false);
     if (i >= 0 && inLoop(i)) {
       const e = foldCents(cur.m, S.notes[i].p);
@@ -943,8 +955,7 @@ function draw(t, ts) {
   }
   // paused: live pitch dot on the now line, with its note name
   if (!S.running && S.live != null) {
-    const r = S.sel != null && S.notes[S.sel] ? S.notes[S.sel].p : ref(t), fm = fold(S.live, r), py = y(fm);
-    g.fillStyle = css('--accent'); g.beginPath(); g.arc(nowX, py, 8 * dpr, 0, 7); g.fill();
+    const fm = S.live, py = edgeDot(nowX, y(fm), 8 * dpr);
     g.fillStyle = '#fff'; g.font = `bold ${14 * dpr}px system-ui`;
     g.fillText(noteName(Math.round(fm)), nowX + 12 * dpr, py);
   }
@@ -1474,7 +1485,7 @@ function releaseWake() { wake?.release().catch(() => {}); wake = null; }
 
 // ---------- boot ----------
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
-  navigator.serviceWorker.register('sw.js?v=202611241408', { updateViaCache: 'none' });
+  navigator.serviceWorker.register('sw.js?v=202611241410', { updateViaCache: 'none' });
   // new version installed -> reload once, but never in the middle of a song
   const hadController = !!navigator.serviceWorker.controller;
   navigator.serviceWorker.addEventListener('controllerchange', () => {

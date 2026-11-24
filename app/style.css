@@ -1,6 +1,6 @@
 :root {
   --bg: #1b1035; --panel: #2a1b52; --panel2: #36246a; --text: #f4efff; --dim: #b7a9d9;
-  --accent: #ff5fa2; --gold: #ffd23f; --good: #4be3a0; --miss: #ff6b6b; --bar: #7c6cff;
+  --accent: #ff5fa2; --gold: #ffd23f; --good: #4be3a0; --close: #9fd0ff; --miss: #ff6b6b; --bar: #7c6cff;
   color-scheme: dark;
 }
 * { box-sizing: border-box; }

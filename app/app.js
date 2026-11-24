@@ -1,8 +1,8 @@
 // ?v= stamps are rewritten by publish.ps1 so every publish loads fresh files past GitHub's CDN cache
-import { readZip, writeZip } from './zip.js?v=202611232339';
-import * as db from './db.js?v=202611232339';
-import { detectPitch } from './pitch.js?v=202611232339';
-import { framesToNotes, placeOctave, toPhrases, noteRange } from './melody.js?v=202611232339';
+import { readZip, writeZip } from './zip.js?v=202611232343';
+import * as db from './db.js?v=202611232343';
+import { detectPitch } from './pitch.js?v=202611232343';
+import { framesToNotes, placeOctave, toPhrases, noteRange } from './melody.js?v=202611232343';
 
 const $ = s => document.querySelector(s);
 const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
@@ -12,6 +12,7 @@ const TOL = { easy: 100, normal: 60, hard: 40 };
 const params = new URLSearchParams(location.search);
 const SIM = params.has('sim'); // dev: fake singer that follows the melody
 if (SIM) window.__S = () => S; // dev inspection
+if (SIM) setTimeout(() => { window.__score = { scoreFrame, noteScore, resetStats }; }); // dev: scoring tests
 
 // ---------- settings ----------
 const settings = (() => {
@@ -398,7 +399,7 @@ function resetStats(a = 0, b = S.notes.length) {
   S.stats ??= S.notes.map(() => ({}));
   for (let i = a; i < b; i++) S.stats[i] = { tot: 0, hit: 0, err: 0, v: 0, judged: false };
 }
-const noteScore = st => (st.tot ? st.hit / st.tot : 0);
+const noteScore = st => (st.tot ? Math.max(st.hit / st.tot, st.floor || 0) : 0);
 function rangeScore(a, b, judgedOnly = false) {
   let sum = 0, dur = 0;
   for (let i = a; i < b; i++) {
@@ -632,8 +633,18 @@ function scoreFrame(ts, midi) {
     st.v++; st.err += e;
     const a = Math.abs(e);
     if (a <= tol) st.hit += 1; else if (a <= tol * 2) st.hit += 0.5;
-  }
+    // Quick notes (< QUICK s) are hard to land in fast singing (user, 2026-11-23: "if the pitch
+    // level passes through the marker it at least counts toward a minimal score, but no points if
+    // it misses the mark entirely"): touching the target earns at least "Good", sliding through it
+    // (pitch crosses the line between two frames) at least "Close". Missing it entirely stays 0.
+    if (n.d < QUICK) {
+      const crossed = st.lastE != null && st.lastE * e < 0 && Math.abs(st.lastE) < 350 && a < 350;
+      st.floor = Math.max(st.floor || 0, a <= tol ? 0.6 : crossed ? 0.4 : 0);
+      st.lastE = e;
+    }
+  } else st.lastE = null;
 }
+const QUICK = 0.4;
 
 function judge(ts) {
   while (S.ji < S.notes.length && S.notes[S.ji].t + S.notes[S.ji].d < ts) {
@@ -642,7 +653,7 @@ function judge(ts) {
     st.judged = true;
     if (!st.tot) continue;
     const sc = noteScore(st), n = S.notes[i];
-    const [text, color] = sc >= 0.8 ? ['Perfect!', '--gold'] : sc >= 0.5 ? ['Good', '--good'] : ['Miss', '--miss'];
+    const [text, color] = sc >= 0.8 ? ['Perfect!', '--gold'] : sc >= 0.5 ? ['Good', '--good'] : sc >= 0.3 ? ['Close', '--close'] : ['Miss', '--miss'];
     S.pops.push({ t: n.t + n.d, p: n.p, text, color: css(color), born: performance.now() });
     if (S.mode === 'song') $('#liveScore').textContent = rangeScore(0, S.notes.length, true);
   }
@@ -703,7 +714,7 @@ function draw(t, ts) {
     let col = css('--bar');
     if (!inLoop(i)) col = '#5a4f8a';
     else if (st.judged && !st.tot) col = '#5a4f8a'; // skipped past / paused over: not sung, not scored
-    else if (st.judged) { const sc = noteScore(st); col = sc >= 0.8 ? css('--gold') : sc >= 0.5 ? css('--good') : css('--miss'); }
+    else if (st.judged) { const sc = noteScore(st); col = sc >= 0.8 ? css('--gold') : sc >= 0.5 ? css('--good') : sc >= 0.3 ? css('--close') : css('--miss'); }
     else if (n.t <= ts && st.tot) {
       const sc = noteScore(st); col = sc >= 0.8 ? css('--gold') : sc >= 0.5 ? css('--good') : css('--bar');
     }
@@ -1263,7 +1274,7 @@ function releaseWake() { wake?.release().catch(() => {}); wake = null; }
 
 // ---------- boot ----------
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
-  navigator.serviceWorker.register('sw.js?v=202611232339', { updateViaCache: 'none' });
+  navigator.serviceWorker.register('sw.js?v=202611232343', { updateViaCache: 'none' });
   // new version installed -> reload once, but never in the middle of a song
   const hadController = !!navigator.serviceWorker.controller;
   navigator.serviceWorker.addEventListener('controllerchange', () => {

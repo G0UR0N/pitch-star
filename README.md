@@ -26,6 +26,10 @@ Tools live in `%USERPROFILE%\PitchScoreGameTools` (Python env, ffmpeg, uv). Not 
 ## Play
 - Open the game, tap **Add songs**, pick `.song` files.
 - Use headphones. Set **Mic delay fix** in ⚙️ if scoring feels late.
+- Scoring: a note scores the share of the time you're within tolerance (Easy 100, Normal 60, Hard 40 cents; half credit up to twice that), weighted by note length. **Quick notes (< 0.4 s) are more generous** (user, 2026-11-23: "if the pitch level passes through the marker it at least counts toward a minimal score, but no points if it misses the mark entirely"):
+  - touching the target at any moment earns at least 60% ("Good");
+  - sliding through it (the pitch crosses the line) earns at least 40% ("Close", light blue);
+  - missing it entirely earns 0.
 - **▶ Start** plays at once; the 3-2-1 count-in was removed (user, 2026-11-23: "you can kill the 3 second countdown, no longer has value").
 - **Guide voice** = original singer volume. **Hear notes** = plays the target melody as tones (also a quick way to check the melody extraction is right).
 - After a song: **Practice weak sections** loops each section until it scores the pass target twice.

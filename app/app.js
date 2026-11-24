@@ -1,8 +1,8 @@
 // ?v= stamps are rewritten by publish.ps1 so every publish loads fresh files past GitHub's CDN cache
-import { readZip, writeZip } from './zip.js?v=202611241556';
-import * as db from './db.js?v=202611241556';
-import { detectPitch } from './pitch.js?v=202611241556';
-import { framesToNotes, placeOctave, toPhrases, noteRange } from './melody.js?v=202611241556';
+import { readZip, writeZip } from './zip.js?v=202611241558';
+import * as db from './db.js?v=202611241558';
+import { detectPitch } from './pitch.js?v=202611241558';
+import { framesToNotes, placeOctave, toPhrases, noteRange } from './melody.js?v=202611241558';
 
 const $ = s => document.querySelector(s);
 const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
@@ -773,7 +773,7 @@ $('#edMine').onclick = () => {
 // mouse clicked"). Tap ＋ add again or press Esc to cancel. On the PC a faint preview follows the mouse.
 const ADD_LEN = 0.5;
 function setPlacing(on) {
-  S.placing = on; S.placeHover = null;
+  S.placing = on; S.placeHover = null; S.placeStart = null;
   $('#edAdd').textContent = on ? '＋ tap the spot…' : '＋ add';
   $('#edAdd').classList.toggle('primary', on);
   cv.style.cursor = on ? 'crosshair' : '';
@@ -781,22 +781,38 @@ function setPlacing(on) {
 $('#edAdd').onclick = () => {
   if (!S?.edit) return;
   setPlacing(!S.placing);
-  if (S.placing) toast('Tap where the new note should start (its row sets the pitch)');
+  if (S.placing) toast('Click where the note starts (its row sets the pitch), then where it ends. Double-click = 0.5 s.', 4000);
 };
 function canvasPoint(e) { // tap -> song time and pitch (true pitch, no octave folding)
   const { t, pps, nowX, m } = S.geo, r = cv.getBoundingClientRect();
   const px = (e.clientX - r.left) * (cv.width / r.width), py = (e.clientY - r.top) * (cv.height / r.height);
   return { tt: t + (px - nowX) / pps, mp: m(py), px, py };
 }
+// Two clicks (user, 2026-11-24: "the first click places the left edge and the right edge follows my
+// mouse cursor until I click again to place the right edge" / "if I double click quickly then drop
+// the default size where I clicked"). The first click also sets the pitch.
+const DOUBLE_MS = 450; // second click this soon and within 10 px = a double-click
 function placeNote(e) {
-  const { tt, mp } = canvasPoint(e);
-  const t = +Math.max(0, tt).toFixed(3), p = Math.round(mp);
-  const n = { t, d: ADD_LEN, p };
+  const { tt, mp } = canvasPoint(e), now = performance.now();
+  const st = S.placeStart;
+  if (!st) {
+    S.placeStart = { t: +Math.max(0, tt).toFixed(3), p: Math.round(mp), at: now, x: e.clientX, y: e.clientY };
+    beep(S.placeStart.p);
+    $('#edInfo').textContent = `${noteName(S.placeStart.p)} from ${fmtTenth(S.placeStart.t)}: click where it ends (double-click = ${ADD_LEN} s)`;
+    return;
+  }
+  let t, d;
+  if (now - st.at < DOUBLE_MS && Math.hypot(e.clientX - st.x, e.clientY - st.y) < 10) { t = st.t; d = ADD_LEN; }
+  else {
+    const end = Math.max(0, tt); // clicking left of the start works too: the two clicks are the two ends
+    t = +Math.min(st.t, end).toFixed(3); d = +Math.max(0.1, Math.abs(end - st.t)).toFixed(3);
+  }
+  const p = st.p, n = { t, d, p };
   pushUndo(); S.multi = new Set();
   S.notes.push(n); edChanged();
   S.sel = S.notes.indexOf(n); beep(p); edShow();
   setPlacing(false);
-  toast(`Added ${noteName(p)} at ${fmtTenth(t)}`);
+  toast(`Added ${noteName(p)} at ${fmtTenth(t)}, ${d.toFixed(2)} s`);
 }
 cv.addEventListener('pointermove', e => {
   if (!S?.placing || !S.geo || e.pointerType !== 'mouse') return;
@@ -1201,13 +1217,17 @@ function draw(t, ts) {
     }
   }
   S.geo = { t, pps, nowX, y, rowH, dpr, m: py => S.lo + ((top + h - py) / h) * span };
-  // ＋ add armed: faint preview of the new note under the mouse
-  if (S.edit && S.placing && S.placeHover) {
-    const bh = Math.max(6 * dpr, rowH * 0.75), ph = S.placeHover;
-    g.save(); g.globalAlpha = 0.45;
-    roundRect(x(ph.t), y(ph.p) - bh / 2, ADD_LEN * pps - 2 * dpr, bh, bh / 2, '#ffffff');
+  // ＋ add armed: faint preview of the new note. Before the first click it sits under the mouse;
+  // after it, it runs from the first click to the mouse (the right edge follows the cursor).
+  if (S.edit && S.placing && (S.placeHover || S.placeStart)) {
+    const bh = Math.max(6 * dpr, rowH * 0.75), st = S.placeStart, ph = S.placeHover;
+    let a, b, p;
+    if (st) { p = st.p; const e = ph ? ph.t : st.t + ADD_LEN; a = Math.min(st.t, e); b = Math.max(st.t + 0.1, Math.max(st.t, e)); }
+    else { p = ph.p; a = ph.t; b = ph.t + ADD_LEN; }
+    g.save(); g.globalAlpha = st ? 0.7 : 0.45;
+    roundRect(x(a), y(p) - bh / 2, Math.max(2, (b - a) * pps - 2 * dpr), bh, bh / 2, '#ffffff');
     g.globalAlpha = 1; g.fillStyle = '#fff'; g.font = `bold ${12 * dpr}px system-ui`;
-    g.fillText(noteName(ph.p), x(ph.t), y(ph.p) - bh / 2 - 6 * dpr);
+    g.fillText(st ? `${noteName(p)} · ${(b - a).toFixed(2)} s` : noteName(p), x(a), y(p) - bh / 2 - 6 * dpr);
     g.restore();
   }
   // judgement pops
@@ -1794,7 +1814,7 @@ function releaseWake() { wake?.release().catch(() => {}); wake = null; }
 
 // ---------- boot ----------
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
-  navigator.serviceWorker.register('sw.js?v=202611241556', { updateViaCache: 'none' });
+  navigator.serviceWorker.register('sw.js?v=202611241558', { updateViaCache: 'none' });
   // new version installed -> reload once, but never in the middle of a song
   const hadController = !!navigator.serviceWorker.controller;
   navigator.serviceWorker.addEventListener('controllerchange', () => {

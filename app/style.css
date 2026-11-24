@@ -84,6 +84,8 @@ select { font: inherit; background: var(--panel2); color: var(--text); border: 0
 .editPanel { flex-wrap: wrap; justify-content: center; }
 .editPanel[hidden] { display: none; }
 #edInfo { flex: 1 1 120px; text-align: center; }
+.edScrub { flex: 1 1 100%; display: flex; align-items: center; gap: 10px; color: var(--dim); font-variant-numeric: tabular-nums; }
+.edScrub input { flex: 1; accent-color: var(--accent); height: 28px; }
 .pinfo { flex: 1; display: flex; flex-direction: column; align-items: center; }
 .pinfo span { color: var(--dim); font-size: .9rem; }
 

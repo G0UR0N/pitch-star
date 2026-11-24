@@ -9,7 +9,7 @@
 <link rel="icon" href="icon.svg">
 <link rel="apple-touch-icon" href="icon-192.png">
 <title>Pitch Star</title>
-<link rel="stylesheet" href="style.css?v=202611232344">
+<link rel="stylesheet" href="style.css?v=202611232350">
 </head>
 <body>
 
@@ -56,6 +56,7 @@
     <button id="btnRecDiscard" class="btn">✕ Discard</button>
   </div>
   <div id="editPanel" class="practice editPanel" hidden>
+    <label class="edScrub"><span id="edTime">0:00.0</span><input id="edSlider" type="range" min="0" max="100" step="0.01" value="0" aria-label="Move the white line through the song"></label>
     <button id="edPrev" class="btn small" title="Previous note">‹</button>
     <button id="edUp" class="btn small" title="Up a semitone">▲</button>
     <button id="edDown" class="btn small" title="Down a semitone">▼</button>
@@ -168,6 +169,6 @@
 </dialog>
 
 <div id="toast" class="toast" hidden></div>
-<script type="module" src="app.js?v=202611232344"></script>
+<script type="module" src="app.js?v=202611232350"></script>
 </body>
 </html>

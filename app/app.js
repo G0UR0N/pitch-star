@@ -1,8 +1,8 @@
 // ?v= stamps are rewritten by publish.ps1 so every publish loads fresh files past GitHub's CDN cache
-import { readZip, writeZip } from './zip.js?v=202611232344';
-import * as db from './db.js?v=202611232344';
-import { detectPitch } from './pitch.js?v=202611232344';
-import { framesToNotes, placeOctave, toPhrases, noteRange } from './melody.js?v=202611232344';
+import { readZip, writeZip } from './zip.js?v=202611232350';
+import * as db from './db.js?v=202611232350';
+import { detectPitch } from './pitch.js?v=202611232350';
+import { framesToNotes, placeOctave, toPhrases, noteRange } from './melody.js?v=202611232350';
 
 const $ = s => document.querySelector(s);
 const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
@@ -522,6 +522,23 @@ $('#btnEdit').onclick = () => {
   if (S.edit) { if (S.running) pause(); toast('Pause, tap a note, then fix it. Changes save as you go.'); edSelect(lowerBound(songTime())); }
   else S.sel = null;
 };
+// timeline slider: drag the white line (where the live pitch dot sits) through the song
+// (user, 2026-11-23: "slider control of where my live pitch line sits in the timeline")
+const fmtTenth = t => `${fmtTime(t)}.${Math.floor((t % 1) * 10)}`;
+function edSliderSync() {
+  if (!S?.edit || S.scrubbing) return;
+  const sl = $('#edSlider'), t = songTime();
+  sl.min = S.meta.start || 0; sl.max = S.meta.duration;
+  sl.value = t; $('#edTime').textContent = fmtTenth(t);
+}
+$('#edSlider').oninput = e => {
+  if (!S?.edit) return;
+  S.scrubbing = true;
+  const t = +e.target.value, now = songTime();
+  if (t < now) resetStats(lowerBound(t), lowerBound(now) + 1); // scrubbing back: un-judge those notes
+  seek(t); $('#edTime').textContent = fmtTenth(t);
+};
+$('#edSlider').onchange = () => { if (S) S.scrubbing = false; };
 $('#edDone').onclick = () => { if (S?.edit) $('#btnEdit').onclick(); toast('Notes saved ✓ (⤓ exports them)'); };
 $('#edPrev').onclick = () => S?.edit && edSelect((S.sel ?? 1) - 1);
 $('#edNext').onclick = () => S?.edit && edSelect((S.sel ?? -1) + 1);
@@ -600,6 +617,7 @@ function tick() {
     S.vocals.currentTime = S.backing.currentTime; S.nextSync = performance.now() + 2000;
   }
   if (S.mode === 'practice') practiceTick(t, ts);
+  edSliderSync();
   draw(ts, ts, r); // draw at "heard" time so bars line up with what she hears (Bluetooth delay)
   requestAnimationFrame(tick);
 }
@@ -1278,7 +1296,7 @@ function releaseWake() { wake?.release().catch(() => {}); wake = null; }
 
 // ---------- boot ----------
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
-  navigator.serviceWorker.register('sw.js?v=202611232344', { updateViaCache: 'none' });
+  navigator.serviceWorker.register('sw.js?v=202611232350', { updateViaCache: 'none' });
   // new version installed -> reload once, but never in the middle of a song
   const hadController = !!navigator.serviceWorker.controller;
   navigator.serviceWorker.addEventListener('controllerchange', () => {

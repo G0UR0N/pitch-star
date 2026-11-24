@@ -1,8 +1,8 @@
 // ?v= stamps are rewritten by publish.ps1 so every publish loads fresh files past GitHub's CDN cache
-import { readZip, writeZip } from './zip.js?v=202611232355';
-import * as db from './db.js?v=202611232355';
-import { detectPitch } from './pitch.js?v=202611232355';
-import { framesToNotes, placeOctave, toPhrases, noteRange } from './melody.js?v=202611232355';
+import { readZip, writeZip } from './zip.js?v=202611240017';
+import * as db from './db.js?v=202611240017';
+import { detectPitch } from './pitch.js?v=202611240017';
+import { framesToNotes, placeOctave, toPhrases, noteRange } from './melody.js?v=202611240017';
 
 const $ = s => document.querySelector(s);
 const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
@@ -597,7 +597,8 @@ $('#edDel').onclick = () => {
 cv.addEventListener('click', e => {
   if (!S?.edit || !S.geo) return;
   const { t, pps, nowX, y, rowH, dpr } = S.geo, r = cv.getBoundingClientRect();
-  const px = (e.clientX - r.left) * dpr, py = (e.clientY - r.top) * dpr, tt = t + (px - nowX) / pps;
+  // map the tap to canvas pixels with the real scale on each axis (they differ if the canvas is stretched)
+  const px = (e.clientX - r.left) * (cv.width / r.width), py = (e.clientY - r.top) * (cv.height / r.height), tt = t + (px - nowX) / pps;
   let best = -1, bd = Infinity;
   S.notes.forEach((n, i) => {
     if (tt < n.t - 0.15 || tt > n.t + n.d + 0.15) return;
@@ -724,6 +725,9 @@ function resize() {
   cv.width = cv.clientWidth * dpr; cv.height = cv.clientHeight * dpr;
 }
 addEventListener('resize', () => S && resize());
+// The stage also changes size when panels open (edit panel, lyrics). Without re-measuring, the
+// drawing is stretched and taps land on a note's "ghost" (user, 2026-11-24). Re-measure on any size change.
+new ResizeObserver(() => S && resize()).observe(cv);
 
 function draw(t, ts) {
   const W = cv.width, H = cv.height, dpr = W / cv.clientWidth;
@@ -1337,7 +1341,7 @@ function releaseWake() { wake?.release().catch(() => {}); wake = null; }
 
 // ---------- boot ----------
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
-  navigator.serviceWorker.register('sw.js?v=202611232355', { updateViaCache: 'none' });
+  navigator.serviceWorker.register('sw.js?v=202611240017', { updateViaCache: 'none' });
   // new version installed -> reload once, but never in the middle of a song
   const hadController = !!navigator.serviceWorker.controller;
   navigator.serviceWorker.addEventListener('controllerchange', () => {

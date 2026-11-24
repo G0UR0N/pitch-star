@@ -107,4 +107,5 @@ Start trim: user, 2026-11-23: "I would like the option to trim off slow starts f
 - Local test: run the `game` launch config, open `http://localhost:8765/app/`.
 - `?sim=1` = fake singer (no mic). `?load=../songs/x.song` = auto-import.
 - `prep\make_test_song.py` builds a synthetic test song.
+- Lesson (2026-11-24): the note canvas must be re-measured whenever its box changes size, not only on window resize. A ResizeObserver does this. Opening the edit panel squashed it to 83% height, so taps landed on each note's "ghost" above or below it. Taps are mapped with the canvas's own x and y scales.
 - Lessons (2026-11-22): the Claude desktop sandbox redirects writes under `AppData` (so tools live in `%USERPROFILE%\PitchScoreGameTools`, and `gh` login/publish must run in the user's real terminal). In PowerShell 5.1 scripts, keep `$ErrorActionPreference='Continue'` around native commands, or their stderr aborts the script.

@@ -37,6 +37,7 @@ Tools live in `%USERPROFILE%\PitchScoreGameTools` (Python env, ffmpeg, uv). Not 
 ## Skip and fix notes on the play screen (user, 2026-11-23)
 - **⏪ 10s / ⏩ 10s** jump back or forward (within the trimmed song, or the section in practice). Going back makes those notes count again. Notes skipped past are grey and don't count against the score.
 - **While paused, the pink pitch dot still shows** what you sing, with its note name, on the white line. Nothing is scored unless the music is playing (user: "only allow scoring to work if music is playing").
+- **Your sung trace stays for editing** (user, 2026-11-23: "If I made a live pitch trace while singing in play mode, I would like that trace to remain when in edit mode"). While a song plays, everything you sing is recorded (in 20 ms steps). In ✎ Edit notes the whole trace is drawn in pink behind the targets, folded to the octave of the nearest note. Singing a stretch again replaces the old trace there (user: "if I re-record myself singing over an existing pitch trace, go ahead and replace it"). It lasts while the app is open, including Sing again and reopening the song, but not after the app is closed.
 - **✎ Edit notes** (full song): the slider on top of the edit panel drags the white line (where the live pitch dot sits) through the song, to 0.1 s (user, 2026-11-23: "slider control of where my live pitch line sits in the timeline"). Tap a note to pick it (it plays its tone), or step with ‹ ›. Then:
   - ▲ ▼ change it by a semitone; ◀ ▶ move it by 0.05 s.
   - ⇤ shorter / longer ⇥ change its length by 0.05 s.

@@ -1,8 +1,8 @@
 // ?v= stamps are rewritten by publish.ps1 so every publish loads fresh files past GitHub's CDN cache
-import { readZip, writeZip } from './zip.js?v=202611232350';
-import * as db from './db.js?v=202611232350';
-import { detectPitch } from './pitch.js?v=202611232350';
-import { framesToNotes, placeOctave, toPhrases, noteRange } from './melody.js?v=202611232350';
+import { readZip, writeZip } from './zip.js?v=202611232355';
+import * as db from './db.js?v=202611232355';
+import { detectPitch } from './pitch.js?v=202611232355';
+import { framesToNotes, placeOctave, toPhrases, noteRange } from './melody.js?v=202611232355';
 
 const $ = s => document.querySelector(s);
 const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
@@ -12,7 +12,7 @@ const TOL = { easy: 100, normal: 60, hard: 40 };
 const params = new URLSearchParams(location.search);
 const SIM = params.has('sim'); // dev: fake singer that follows the melody
 if (SIM) window.__S = () => S; // dev inspection
-if (SIM) setTimeout(() => { window.__score = { scoreFrame, noteScore, resetStats, lyricsTick }; }); // dev: scoring tests
+if (SIM) setTimeout(() => { window.__score = { scoreFrame, noteScore, resetStats, lyricsTick, traceWrite, draw, simVoice }; }); // dev: scoring tests
 
 // ---------- settings ----------
 const settings = (() => {
@@ -363,6 +363,7 @@ async function openSong(id, opts = {}) {
     lo: m.range[0] - 3, hi: m.range[1] + 3, rate: 1, trail: [], pops: [], running: false,
     mode: 'song', queue: [], qi: 0, attempts: [], passes: 0, guideStale,
   };
+  S.trace = traceFor(song);
   $('#melodyTog').checked = guideStale || !!opts.hearNotes;
   $('#recPanel').hidden = true; $('#syncPanel').hidden = true;
   $('#lyricsTog').checked = settings.lyrics;
@@ -411,8 +412,32 @@ function rangeScore(a, b, judgedOnly = false) {
 }
 const lowerBound = t => { let lo = 0, hi = S.notes.length; while (lo < hi) { const m = (lo + hi) >> 1; if (S.notes[m].t + S.notes[m].d < t) lo = m + 1; else hi = m; } return lo; };
 
+// ---------- whole-song pitch trace: what she sang, kept for the editor (user, 2026-11-23: "If I
+// made a live pitch trace while singing in play mode, I would like that trace to remain when in
+// edit mode"). 20 ms bins per song, NaN = silence; singing a stretch again overwrites it. Kept
+// while the app is open (also across "Sing again"). ----------
+const TRACE_DT = 0.02, traces = new Map();
+function traceFor(song) {
+  const need = Math.ceil((song.meta.fullDuration || song.meta.duration) / TRACE_DT) + 2;
+  let tr = traces.get(song.id);
+  if (!tr || tr.length < need) {
+    const n = new Float32Array(need).fill(NaN);
+    if (tr) n.set(tr.subarray(0, Math.min(tr.length, need)));
+    traces.set(song.id, tr = n);
+  }
+  return tr;
+}
+function traceWrite(ts, midi) {
+  const tr = S.trace, b = Math.round(ts / TRACE_DT);
+  if (!tr || b < 0 || b >= tr.length) return;
+  const from = S.traceBin != null && b > S.traceBin && b - S.traceBin < 10 ? S.traceBin + 1 : b; // fill gaps between frames
+  for (let k = from; k <= b; k++) tr[k] = midi ?? NaN;
+  S.traceBin = b;
+}
+
 function seek(t) {
   t = Math.max(0, t);
+  if (S) S.traceBin = null;
   S.backing.currentTime = t; S.vocals.currentTime = t;
   S.lastCT = t; S.lastPerf = performance.now(); S.lastT = t;
   S.ni = S.ji = lowerBound(t); S.trail = []; S.pops = [];
@@ -599,6 +624,7 @@ function tick() {
   if (S.running) {
     r = SIM ? simVoice(ts) : readMic();
     scoreFrame(ts, r?.midi ?? null);
+    traceWrite(ts, r?.midi ?? null);
     S.trail.push({ t: ts, m: r?.midi ?? null });
     while (S.trail.length && S.trail[0].t < ts - 4) S.trail.shift();
     S.live = null;
@@ -738,6 +764,21 @@ function draw(t, ts) {
     }
     const bh = Math.max(6 * dpr, rowH * 0.75);
     roundRect(x(n.t), y(n.p) - bh / 2, Math.max(2, n.d * pps - 2 * dpr), bh, bh / 2, col);
+  }
+  // edit mode: the whole sung trace, folded to the octave of the nearest target note
+  if (S.edit && S.trace) {
+    const tr = S.trace, b0 = Math.max(0, Math.floor(t0 / TRACE_DT)), b1 = Math.min(tr.length - 1, Math.ceil(t1 / TRACE_DT));
+    g.save(); g.globalAlpha = 0.75; g.lineWidth = 3 * dpr; g.strokeStyle = css('--accent'); g.lineCap = 'round'; g.lineJoin = 'round';
+    g.beginPath(); let pen = false, last = 0;
+    for (let k = b0; k <= b1; k++) {
+      const m = tr[k];
+      if (Number.isNaN(m)) { pen = false; continue; }
+      const tt = k * TRACE_DT, ni = Math.min(S.notes.length - 1, lowerBound(tt)), r = S.notes[ni]?.p ?? m;
+      const fm = m - 12 * Math.round((m - r) / 12), px = x(tt), py = y(fm);
+      if (pen && Math.abs(fm - last) < 3) g.lineTo(px, py); else g.moveTo(px, py);
+      pen = true; last = fm;
+    }
+    g.stroke(); g.restore();
   }
   // newly recorded melody (preview before Keep)
   if (S.mode === 'record' && S.rec.preview) {
@@ -1296,7 +1337,7 @@ function releaseWake() { wake?.release().catch(() => {}); wake = null; }
 
 // ---------- boot ----------
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
-  navigator.serviceWorker.register('sw.js?v=202611232350', { updateViaCache: 'none' });
+  navigator.serviceWorker.register('sw.js?v=202611232355', { updateViaCache: 'none' });
   // new version installed -> reload once, but never in the middle of a song
   const hadController = !!navigator.serviceWorker.controller;
   navigator.serviceWorker.addEventListener('controllerchange', () => {

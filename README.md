@@ -141,7 +141,12 @@ Tools live in `%USERPROFILE%\PitchScoreGameTools` (Python env, ffmpeg, uv). Not 
 1. Edit on any device (notes, 🎙️ melody, ✂️ trim, 📝 lyrics, tap-sync). The card then shows **☁️ Save edits to Drive**.
 2. Tap it. On the phone the share sheet opens: pick **Drive → PitchStar → PrepFiles**. On the PC a save box opens: pick `G:\My Drive\PitchStar\PrepFiles`. It writes `<song>.edits.txt` (small; it holds the notes, trim, name, folder and lyrics).
 3. On the PC run `tools\merge_edits.py` (venv python), or ask Claude. It folds the newest edits file for each song into the master `.song`: notes replaced, trim applied (audio cut, times shifted), name and folder set, lyrics you typed kept. The pack is backed up to `PitchScoreGameTools\backup` first, the edits file moves to `PitchStar\PrepFiles\merged`, and the report goes to `tools\merge_edits.log`.
-- Or, on the PC, ⤓ export the whole song straight into `G:\My Drive\PitchStar\Songs` (user, 2026-11-24: "I've been using the export arrow instead"). That also counts as saving the edits: the ☁️ flag clears, and other devices that re-add the song take it without asking. On a phone ⤓ only downloads, so the flag stays.
+- Or, on the PC, ⤓ export the whole song straight into `G:\My Drive\PitchStar\Songs` (user, 2026-11-24: "I've been using the export arrow instead"). Other devices that re-add the exported song take it without asking.
+- When the ☁️ flag shows (user, 2026-11-24: "or better yet make it go away if my loaded version matches the google drive folder version"):
+  - **PC:** tap **🔗 Link Drive folder** above the song list once and pick `G:\My Drive\PitchStar\Songs`. From then on the app compares each edited song with its copy there (notes, trim, lyrics). The flag shows only while they differ.
+    - The check runs when the app opens, when you come back to its window, and after each ⤓ save, which now opens in that folder.
+    - If Chrome asks again later, the button reads **🔄 Check Drive**: one tap.
+  - **Phone:** a phone can't link a Drive folder, so any use of ⤓ clears the flag instead (user, same day: "make the save edits flag automatically go away once I interact with the download arrow button").
 4. Other devices: **Add songs** → pick the song again. Re-adding keeps nothing from before except name and folder; the master now holds the edits.
 - Safety: if this device has edits the Drive file doesn't have yet, re-adding asks before replacing them.
 - The master is protected. `prep.py` won't rebuild a pack holding your edits unless you pass `--force`, and `lyrics_check --fix` leaves lyrics you typed alone.

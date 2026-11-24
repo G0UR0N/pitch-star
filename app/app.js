@@ -1,8 +1,8 @@
 // ?v= stamps are rewritten by publish.ps1 so every publish loads fresh files past GitHub's CDN cache
-import { readZip, writeZip } from './zip.js?v=202611241529';
-import * as db from './db.js?v=202611241529';
-import { detectPitch } from './pitch.js?v=202611241529';
-import { framesToNotes, placeOctave, toPhrases, noteRange } from './melody.js?v=202611241529';
+import { readZip, writeZip } from './zip.js?v=202611241536';
+import * as db from './db.js?v=202611241536';
+import { detectPitch } from './pitch.js?v=202611241536';
+import { framesToNotes, placeOctave, toPhrases, noteRange } from './melody.js?v=202611241536';
 
 const $ = s => document.querySelector(s);
 const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
@@ -707,7 +707,7 @@ $('#btnEdit').onclick = () => {
   if (!S || S.mode !== 'song') return;
   S.edit = !S.edit;
   $('#editPanel').hidden = !S.edit;
-  S.multiMode = false; S.multi = new Set();
+  S.multiMode = false; S.multi = new Set(); setPlacing(false);
   if (S.edit) { if (S.running) pause(); toast('Pause, tap a note, then fix it. Changes save as you go.'); edSelect(lowerBound(songTime())); }
   else S.sel = null;
 };
@@ -772,17 +772,44 @@ $('#edMine').onclick = () => {
 };
 $('#edShort').onclick = () => edApply(n => { n.d = +Math.max(0.1, n.d - 0.05).toFixed(3); });
 $('#edLong').onclick = () => edApply(n => { n.d = +(n.d + 0.05).toFixed(3); });
+// ＋ add: arm it, then tap / click anywhere on the notes view; a 0.5 s note lands with its left end
+// where you tapped, at the pitch of that row (user, 2026-11-24: "when I click add, let me pick where
+// it lands ... a pitch marker of default length lands there with the left portion landing where the
+// mouse clicked"). Tap ＋ add again or press Esc to cancel. On the PC a faint preview follows the mouse.
+const ADD_LEN = 0.5;
+function setPlacing(on) {
+  S.placing = on; S.placeHover = null;
+  $('#edAdd').textContent = on ? '＋ tap the spot…' : '＋ add';
+  $('#edAdd').classList.toggle('primary', on);
+  cv.style.cursor = on ? 'crosshair' : '';
+}
 $('#edAdd').onclick = () => {
   if (!S?.edit) return;
-  const t = +songTime().toFixed(3), near = S.notes[Math.min(S.notes.length - 1, lowerBound(t))] || S.notes[S.notes.length - 1];
-  const base = near?.p ?? Math.round((S.lo + S.hi) / 2);
-  const p = S.live != null ? Math.round(placePitch(S.live, base)) : base;
-  const n = { t, d: 0.5, p };
+  setPlacing(!S.placing);
+  if (S.placing) toast('Tap where the new note should start (its row sets the pitch)');
+};
+function canvasPoint(e) { // tap -> song time and pitch (true pitch, no octave folding)
+  const { t, pps, nowX, m } = S.geo, r = cv.getBoundingClientRect();
+  const px = (e.clientX - r.left) * (cv.width / r.width), py = (e.clientY - r.top) * (cv.height / r.height);
+  return { tt: t + (px - nowX) / pps, mp: m(py), px, py };
+}
+function placeNote(e) {
+  const { tt, mp } = canvasPoint(e);
+  const t = +Math.max(0, tt).toFixed(3), p = Math.round(mp);
+  const n = { t, d: ADD_LEN, p };
   pushUndo(); S.multi = new Set();
   S.notes.push(n); edChanged();
   S.sel = S.notes.indexOf(n); beep(p); edShow();
-  toast(`Added ${noteName(p)} at the white line`);
-};
+  setPlacing(false);
+  toast(`Added ${noteName(p)} at ${fmtTenth(t)}`);
+}
+cv.addEventListener('pointermove', e => {
+  if (!S?.placing || !S.geo || e.pointerType !== 'mouse') return;
+  const { tt, mp } = canvasPoint(e);
+  S.placeHover = { t: tt, p: Math.round(mp) };
+});
+cv.addEventListener('pointerleave', () => { if (S) S.placeHover = null; });
+addEventListener('keydown', e => { if (e.key === 'Escape' && S?.placing) setPlacing(false); });
 $('#edDel').onclick = () => {
   const list = selected();
   if (!list.length) { toast('Tap a note first'); return; }
@@ -795,6 +822,7 @@ $('#edDel').onclick = () => {
 };
 cv.addEventListener('click', e => {
   if (!S?.edit || !S.geo) return;
+  if (S.placing) { placeNote(e); return; }
   const { t, pps, nowX, y, rowH, dpr } = S.geo, r = cv.getBoundingClientRect();
   // map the tap to canvas pixels with the real scale on each axis (they differ if the canvas is stretched)
   const px = (e.clientX - r.left) * (cv.width / r.width), py = (e.clientY - r.top) * (cv.height / r.height), tt = t + (px - nowX) / pps;
@@ -1076,7 +1104,16 @@ function draw(t, ts) {
       g.strokeRect(x(n.t) - 2 * dpr, y(n.p) - bh / 2 - 2 * dpr, Math.max(2, n.d * pps) + 2 * dpr, bh + 4 * dpr);
     }
   }
-  S.geo = { t, pps, nowX, y, rowH, dpr };
+  S.geo = { t, pps, nowX, y, rowH, dpr, m: py => S.lo + ((top + h - py) / h) * span };
+  // ＋ add armed: faint preview of the new note under the mouse
+  if (S.edit && S.placing && S.placeHover) {
+    const bh = Math.max(6 * dpr, rowH * 0.75), ph = S.placeHover;
+    g.save(); g.globalAlpha = 0.45;
+    roundRect(x(ph.t), y(ph.p) - bh / 2, ADD_LEN * pps - 2 * dpr, bh, bh / 2, '#ffffff');
+    g.globalAlpha = 1; g.fillStyle = '#fff'; g.font = `bold ${12 * dpr}px system-ui`;
+    g.fillText(noteName(ph.p), x(ph.t), y(ph.p) - bh / 2 - 6 * dpr);
+    g.restore();
+  }
   // judgement pops
   const now = performance.now();
   S.pops = S.pops.filter(p => now - p.born < 900);
@@ -1661,7 +1698,7 @@ function releaseWake() { wake?.release().catch(() => {}); wake = null; }
 
 // ---------- boot ----------
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
-  navigator.serviceWorker.register('sw.js?v=202611241529', { updateViaCache: 'none' });
+  navigator.serviceWorker.register('sw.js?v=202611241536', { updateViaCache: 'none' });
   // new version installed -> reload once, but never in the middle of a song
   const hadController = !!navigator.serviceWorker.controller;
   navigator.serviceWorker.addEventListener('controllerchange', () => {

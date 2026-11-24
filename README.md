@@ -112,6 +112,21 @@ Tools live in `%USERPROFILE%\PitchScoreGameTools` (Python env, ffmpeg, uv). Not 
 - Check singer graded against your edits:
   - On raw prep notes, 43 of its 52 flags were at spots you fixed (83%).
   - On your finished song 31 flags were left. 8 were the spoken intro, now skipped in the PC tool and the app. The other 23 are harmony spots.
+- Second full repair (2026-11-24 14:40; the previous answer key is kept in `PitchScoreGameTools\truth_history`):
+  - 155 notes: 58 re-timed (median 0.1 s later), 5 moved down an octave, 2 re-pitched.
+  - Today's prep scores 0.68 against it, the old prep 0.53. The ranking of methods is unchanged.
+  - Timing measured against the singing: 0:25–0:35 now sits 0.1 s late. As placed, the notes match the singing 68% of the time; 0.1 s earlier they'd match 80%. The previous version there was spot on. Every other stretch is within ±0.05 s.
+  - The check singer's flags went from 23 to 31, almost all at 0:28–0:33. Each flagged target hears the next note's pitch, a sign that targets there sit late.
+- Third repair (15:00): 0:25–0:35 fixed from 68% to 73% of the time on the sung pitch. Check-singer flags went from 31 to 26. Prep scores 0.68 against it, the old prep 0.54. Your saved copy was deleted on your word once the re-timed and tweaked version proved better (user, 2026-11-24: "go ahead and delete my backup, this version is our best so far"). Its notes remain in `truth_history` as `v3`.
+- **Re-timing by Claude** (user, 2026-11-24: "save off a copy of mine and you take a stab at timing corrections so that the melody cadence is a better match"): `tools\retime_notes.py <name> [--write]`.
+  - Each note starts at the vocal attack of its syllable: the attack just before the singer reaches the note's pitch, or the moment the pitch is reached if there's no attack.
+  - Ends stay as you placed them.
+  - Only moves of 0.04–0.3 s, never into the previous note.
+  - A start moves later only where nobody is singing at the old start. A scoop up into a note starts the syllable on time, only the pitch arrives late.
+  - On These Palace Walls 26 notes moved, almost all earlier. Time on pitch is unchanged (76.5% → 76.4%), because the syllable's attack comes before its pitch, so pitch measures can't confirm a rhythm gain. Your ear judges.
+  - Your verdict (user, 2026-11-24: "its good, I did make a few tweaks"). Of the 26 moves you kept about 20, nudged 4 a further 0.05 s earlier and 2 back 0.05 s later. You also turned 0:30.9 into a second C#4 and trimmed a few lengths. Starts may sit slightly earlier still by ear; too little evidence to change the tool yet. The answer key is now this 15:10 version.
+  - Rejected: moving starts later to where the pitch arrives. That gained +2.8% on pitch, but at scoops it would put the marker after the syllable has begun.
+- Lesson (2026-11-24): a run of flags where each target "hears the next note" means those targets sit late. Measure the best time shift per stretch (scratch script `offset2.py`; worth turning into a tool if it recurs).
 - More songs you repair become more ground truth. Snapshot them, and every change can be scored against all of them before it ships.
 - First repair by Claude (These Palace Walls after 1:15, 2026-11-24, for you to check):
   - The backing is in C#/D♭ major from about 1:12.
@@ -125,6 +140,7 @@ Tools live in `%USERPROFILE%\PitchScoreGameTools` (Python env, ffmpeg, uv). Not 
 1. Edit on any device (notes, 🎙️ melody, ✂️ trim, 📝 lyrics, tap-sync). The card then shows **☁️ Save edits to Drive**.
 2. Tap it. On the phone the share sheet opens: pick **Drive → PitchStar → PrepFiles**. On the PC a save box opens: pick `G:\My Drive\PitchStar\PrepFiles`. It writes `<song>.edits.txt` (small; it holds the notes, trim, name, folder and lyrics).
 3. On the PC run `tools\merge_edits.py` (venv python), or ask Claude. It folds the newest edits file for each song into the master `.song`: notes replaced, trim applied (audio cut, times shifted), name and folder set, lyrics you typed kept. The pack is backed up to `PitchScoreGameTools\backup` first, the edits file moves to `PitchStar\PrepFiles\merged`, and the report goes to `tools\merge_edits.log`.
+- Or, on the PC, ⤓ export the whole song straight into `G:\My Drive\PitchStar\Songs` (user, 2026-11-24: "I've been using the export arrow instead"). That also counts as saving the edits: the ☁️ flag clears, and other devices that re-add the song take it without asking. On a phone ⤓ only downloads, so the flag stays.
 4. Other devices: **Add songs** → pick the song again. Re-adding keeps nothing from before except name and folder; the master now holds the edits.
 - Safety: if this device has edits the Drive file doesn't have yet, re-adding asks before replacing them.
 - The master is protected. `prep.py` won't rebuild a pack holding your edits unless you pass `--force`, and `lyrics_check --fix` leaves lyrics you typed alone.

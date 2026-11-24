@@ -1,8 +1,8 @@
 // ?v= stamps are rewritten by publish.ps1 so every publish loads fresh files past GitHub's CDN cache
-import { readZip, writeZip } from './zip.js?v=202611241444';
-import * as db from './db.js?v=202611241444';
-import { detectPitch } from './pitch.js?v=202611241444';
-import { framesToNotes, placeOctave, toPhrases, noteRange } from './melody.js?v=202611241444';
+import { readZip, writeZip } from './zip.js?v=202611241526';
+import * as db from './db.js?v=202611241526';
+import { detectPitch } from './pitch.js?v=202611241526';
+import { framesToNotes, placeOctave, toPhrases, noteRange } from './melody.js?v=202611241526';
 
 const $ = s => document.querySelector(s);
 const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
@@ -625,9 +625,23 @@ function toggleMulti(n) {
   S.sel = first ? S.notes.indexOf(first) : null;
   edShow();
 }
+const snapNotes = () => S.notes.map(n => ({ ...n }));
 function pushUndo() {
-  (S.undo ??= []).push(S.notes.map(n => ({ ...n })));
+  (S.undo ??= []).push(snapNotes());
   if (S.undo.length > 50) S.undo.shift();
+  S.redo = []; // a new change ends the redo chain
+}
+// swap the notes for a stored version (undo / redo), keeping the view near the picked note
+function restoreNotes(from, to, msg) {
+  const prev = from?.pop();
+  if (!prev) { toast(`Nothing to ${msg.toLowerCase().replace(/e$/, '')}`); return; }
+  to.push(snapNotes());
+  const firstT = selected()[0]?.t;
+  S.notes.splice(0, S.notes.length, ...prev);
+  S.multi = new Set();
+  edChanged();
+  S.sel = firstT != null ? Math.max(0, Math.min(S.notes.length - 1, lowerBound(firstT))) : null;
+  edShow(); toast(msg === 'Undo' ? 'Undone' : 'Redone');
 }
 $('#edMulti').onclick = () => {
   if (!S?.edit) return;
@@ -645,17 +659,17 @@ $('#edView').onclick = () => {
   S.multiMode = true; S.multi = new Set(vis); S.sel = S.notes.indexOf(vis[0]);
   edShow();
 };
-$('#edUndo').onclick = () => {
-  if (!S?.edit) return;
-  const prev = S.undo?.pop();
-  if (!prev) { toast('Nothing to undo'); return; }
-  const firstT = selected()[0]?.t;
-  S.notes.splice(0, S.notes.length, ...prev);
-  S.multi = new Set();
-  edChanged();
-  S.sel = firstT != null ? Math.max(0, Math.min(S.notes.length - 1, lowerBound(firstT))) : null;
-  edShow(); toast('Undone');
-};
+$('#edUndo').onclick = () => { if (S?.edit) restoreNotes(S.undo, S.redo ??= [], 'Undo'); };
+$('#edRedo').onclick = () => { if (S?.edit) restoreNotes(S.redo, S.undo ??= [], 'Redo'); };
+// keyboard (user, 2026-11-24: "edit needs ctrl+z and ctrl+y support"): Ctrl+Z undo,
+// Ctrl+Y or Ctrl+Shift+Z redo (Cmd on a Mac). Only in edit mode, and not while typing in a text box.
+addEventListener('keydown', e => {
+  if (!S?.edit || !(e.ctrlKey || e.metaKey) || e.altKey) return;
+  if (e.target.closest?.('textarea, input[type=text], input[type=search], [contenteditable]')) return;
+  const k = e.key.toLowerCase();
+  if (k === 'z' && !e.shiftKey) { e.preventDefault(); $('#edUndo').onclick(); }
+  else if (k === 'y' || (k === 'z' && e.shiftKey)) { e.preventDefault(); $('#edRedo').onclick(); }
+});
 function edSelect(i) {
   if (!S.notes.length) { S.sel = null; edShow(); return; }
   if (!S.multiMode) S.multi = new Set();
@@ -1591,7 +1605,7 @@ function releaseWake() { wake?.release().catch(() => {}); wake = null; }
 
 // ---------- boot ----------
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
-  navigator.serviceWorker.register('sw.js?v=202611241444', { updateViaCache: 'none' });
+  navigator.serviceWorker.register('sw.js?v=202611241526', { updateViaCache: 'none' });
   // new version installed -> reload once, but never in the middle of a song
   const hadController = !!navigator.serviceWorker.controller;
   navigator.serviceWorker.addEventListener('controllerchange', () => {

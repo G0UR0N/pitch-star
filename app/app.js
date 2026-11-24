@@ -1,8 +1,8 @@
 // ?v= stamps are rewritten by publish.ps1 so every publish loads fresh files past GitHub's CDN cache
-import { readZip, writeZip } from './zip.js?v=202611241536';
-import * as db from './db.js?v=202611241536';
-import { detectPitch } from './pitch.js?v=202611241536';
-import { framesToNotes, placeOctave, toPhrases, noteRange } from './melody.js?v=202611241536';
+import { readZip, writeZip } from './zip.js?v=202611241547';
+import * as db from './db.js?v=202611241547';
+import { detectPitch } from './pitch.js?v=202611241547';
+import { framesToNotes, placeOctave, toPhrases, noteRange } from './melody.js?v=202611241547';
 
 const $ = s => document.querySelector(s);
 const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
@@ -707,7 +707,8 @@ $('#btnEdit').onclick = () => {
   if (!S || S.mode !== 'song') return;
   S.edit = !S.edit;
   $('#editPanel').hidden = !S.edit;
-  S.multiMode = false; S.multi = new Set(); setPlacing(false);
+  S.multiMode = false; S.multi = new Set(); setPlacing(false); S.drag = null;
+  cv.style.touchAction = S.edit ? 'none' : ''; // a finger drags notes instead of scrolling the page
   if (S.edit) { if (S.running) pause(); toast('Pause, tap a note, then fix it. Changes save as you go.'); edSelect(lowerBound(songTime())); }
   else S.sel = null;
 };
@@ -746,8 +747,6 @@ $('#edNext').onclick = () => {
   }
   edSelect((S.sel ?? -1) + 1);
 };
-$('#edUp').onclick = () => edApply(n => { n.p += 1; beep(n.p); });
-$('#edDown').onclick = () => edApply(n => { n.p -= 1; beep(n.p); });
 // octave shift (user, 2026-11-24: "I need better octave control... The "Hear Notes" option throws
 // notes in the wrong octave lots ... Maybe give up/down arrows for octave shifting"). Scoring ignores
 // octaves; this sets the octave "Hear notes" plays and where the note is drawn.
@@ -759,8 +758,6 @@ function edOctave(k) {
 }
 $('#edOctUp').onclick = () => edOctave(1);
 $('#edOctDown').onclick = () => edOctave(-1);
-$('#edLeft').onclick =() => edApply(n => { n.t = +Math.max(0, n.t - 0.05).toFixed(3); });
-$('#edRight').onclick = () => edApply(n => { n.t = +(n.t + 0.05).toFixed(3); });
 $('#edMine').onclick = () => {
   if (S?.live == null) { toast('Sing the note (music paused), then tap 🎤 again'); return; }
   // several notes: the first goes to your pitch, the rest move by the same step (the tune's shape stays)
@@ -770,8 +767,6 @@ $('#edMine').onclick = () => {
   edApply(n => { n.p += step; S.lo = Math.min(S.lo, n.p - 2); S.hi = Math.max(S.hi, n.p + 2); });
   beep(first.p);
 };
-$('#edShort').onclick = () => edApply(n => { n.d = +Math.max(0.1, n.d - 0.05).toFixed(3); });
-$('#edLong').onclick = () => edApply(n => { n.d = +(n.d + 0.05).toFixed(3); });
 // ＋ add: arm it, then tap / click anywhere on the notes view; a 0.5 s note lands with its left end
 // where you tapped, at the pitch of that row (user, 2026-11-24: "when I click add, let me pick where
 // it lands ... a pitch marker of default length lands there with the left portion landing where the
@@ -820,8 +815,76 @@ $('#edDel').onclick = () => {
   edSelect(Math.min(at, S.notes.length - 1));
   toast(list.length > 1 ? `${list.length} notes deleted (↶ undo brings them back)` : 'Note deleted');
 };
+// ---------- drag notes with the mouse or a finger (user, 2026-11-24: "let me grab either edge of the
+// marker to shrink/expand from that end as I need ... grab near the middle of the marker and move it
+// around with my mouse"; the ▲▼◀▶ and shorter/longer buttons went). Middle: move in time and pitch
+// (a picked group moves together). Ends: stretch / shrink from that end, the other end stays.
+// A tap without moving still just picks the note. One drag = one undo step. ----------
+const EDGE_PX = 10; // grab zone at each end, in screen pixels
+function noteAt(px, py) {
+  const { t, pps, nowX, y, rowH, dpr } = S.geo;
+  const bh = Math.max(6 * dpr, rowH * 0.75), edge = EDGE_PX * dpr;
+  let best = null, bd = Infinity;
+  S.notes.forEach((n, i) => {
+    const x0 = nowX + (n.t - t) * pps, x1 = x0 + n.d * pps, inner = Math.min(edge, (x1 - x0) / 3);
+    if (px < x0 - edge || px > x1 + edge) return;
+    const d = Math.abs(py - y(n.p));
+    if (d > Math.max(bh, 16 * dpr) || d >= bd) return;
+    bd = d; best = { i, zone: px < x0 + inner ? 'left' : px > x1 - inner ? 'right' : 'move' };
+  });
+  return best;
+}
+const CURSOR = { left: 'ew-resize', right: 'ew-resize', move: 'grab' };
+cv.addEventListener('pointerdown', e => {
+  if (!S?.edit || !S.geo || S.placing || e.button > 0) return;
+  const { px, py } = canvasPoint(e), hit = noteAt(px, py);
+  if (hit) S.drag = { px, py, m0: S.geo.m(py), hit, n: S.notes[hit.i], id: e.pointerId, started: false };
+});
+cv.addEventListener('pointermove', e => {
+  if (!S?.edit || !S.geo || S.placing) return;
+  const { px, py } = canvasPoint(e), D = S.drag;
+  if (!D) { if (e.pointerType === 'mouse') cv.style.cursor = CURSOR[noteAt(px, py)?.zone] || ''; return; }
+  if (!D.started) {
+    if (Math.hypot(px - D.px, py - D.py) < 5 * S.geo.dpr) return; // still a tap
+    D.started = true;
+    try { cv.setPointerCapture(D.id); } catch {}
+    if (!selected().includes(D.n)) edSelect(S.notes.indexOf(D.n));
+    D.group = D.hit.zone === 'move' ? selected() : [D.n];
+    D.orig = D.group.map(n => ({ n, t: n.t, d: n.d, p: n.p }));
+    pushUndo(); cv.style.cursor = D.hit.zone === 'move' ? 'grabbing' : 'ew-resize';
+  }
+  const dt = (px - D.px) / S.geo.pps, dp = Math.round(S.geo.m(py) - D.m0);
+  for (const o of D.orig) {
+    const n = o.n, end = o.t + o.d;
+    if (D.hit.zone === 'move') { n.t = +Math.max(0, o.t + dt).toFixed(3); n.p = o.p + dp; }
+    else if (D.hit.zone === 'left') { n.t = +Math.min(end - 0.1, Math.max(0, o.t + dt)).toFixed(3); n.d = +(end - n.t).toFixed(3); }
+    else n.d = +Math.max(0.1, o.d + dt).toFixed(3);
+  }
+  if (D.hit.zone === 'move' && D.n.p !== D.lastP) { D.lastP = D.n.p; beep(D.n.p); }
+  edShow();
+});
+function endDrag() {
+  const D = S?.drag;
+  if (!D) return;
+  S.drag = null;
+  if (!D.started) return; // a tap: the click handler picks the note
+  S.dragged = true; // swallow the click that follows
+  for (const o of D.orig) { S.lo = Math.min(S.lo, o.n.p - 2); S.hi = Math.max(S.hi, o.n.p + 2); }
+  edChanged(); S.sel = S.notes.indexOf(D.n); edShow();
+  cv.style.cursor = '';
+}
+cv.addEventListener('pointerup', endDrag);
+cv.addEventListener('pointercancel', endDrag);
+// PC keyboard nudges for fine moves (the buttons went): ↑↓ a semitone, ←→ 0.05 s
+addEventListener('keydown', e => {
+  if (!S?.edit || e.ctrlKey || e.metaKey || e.altKey || e.target.closest?.('input, textarea, select, [contenteditable]')) return;
+  const f = { ArrowUp: n => { n.p += 1; beep(n.p); }, ArrowDown: n => { n.p -= 1; beep(n.p); },
+    ArrowLeft: n => { n.t = +Math.max(0, n.t - 0.05).toFixed(3); }, ArrowRight: n => { n.t = +(n.t + 0.05).toFixed(3); } }[e.key];
+  if (f && selected().length) { e.preventDefault(); edApply(f); }
+});
 cv.addEventListener('click', e => {
   if (!S?.edit || !S.geo) return;
+  if (S.dragged) { S.dragged = false; return; }
   if (S.placing) { placeNote(e); return; }
   const { t, pps, nowX, y, rowH, dpr } = S.geo, r = cv.getBoundingClientRect();
   // map the tap to canvas pixels with the real scale on each axis (they differ if the canvas is stretched)
@@ -1698,7 +1761,7 @@ function releaseWake() { wake?.release().catch(() => {}); wake = null; }
 
 // ---------- boot ----------
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
-  navigator.serviceWorker.register('sw.js?v=202611241536', { updateViaCache: 'none' });
+  navigator.serviceWorker.register('sw.js?v=202611241547', { updateViaCache: 'none' });
   // new version installed -> reload once, but never in the middle of a song
   const hadController = !!navigator.serviceWorker.controller;
   navigator.serviceWorker.addEventListener('controllerchange', () => {

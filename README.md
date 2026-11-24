@@ -54,7 +54,7 @@ Tools live in `%USERPROFILE%\PitchScoreGameTools` (Python env, ffmpeg, uv). Not 
     - **OPEN** (user, same day): "if certain song ranges make the window too zoomed out, we will address folding octave options then".
   - ⇤ shorter / longer ⇥ change its length by 0.05 s.
   - 🎤 my pitch sets it to the note you're singing.
-  - ＋ add puts a new 0.5 s note at the white line (at your sung pitch if you're singing, otherwise the nearby note's pitch).
+  - ＋ add, then tap or click anywhere on the notes view: a 0.5 s note lands with its left end where you tapped, at that row's pitch (user, 2026-11-24: "when I click add, let me pick where it lands ... with the left portion landing where the mouse clicked"). On the PC a faint preview with its note name follows the mouse. Tap ＋ add again, or press Esc, to cancel. ↶ undo removes it.
   - 🗑 deletes it.
   - **Several notes at once** (user, 2026-11-24: "let me select multiple pitch markers for mass shifting options"):
     - **☐ select many**: each tap adds or removes a note. In that mode › adds the next note and ‹ drops the last one.

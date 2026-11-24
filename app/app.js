@@ -1,8 +1,8 @@
 // ?v= stamps are rewritten by publish.ps1 so every publish loads fresh files past GitHub's CDN cache
-import { readZip, writeZip } from './zip.js?v=202611240017';
-import * as db from './db.js?v=202611240017';
-import { detectPitch } from './pitch.js?v=202611240017';
-import { framesToNotes, placeOctave, toPhrases, noteRange } from './melody.js?v=202611240017';
+import { readZip, writeZip } from './zip.js?v=202611240021';
+import * as db from './db.js?v=202611240021';
+import { detectPitch } from './pitch.js?v=202611240021';
+import { framesToNotes, placeOctave, toPhrases, noteRange } from './melody.js?v=202611240021';
 
 const $ = s => document.querySelector(s);
 const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
@@ -258,7 +258,7 @@ $('#importInput').onchange = async e => {
     try { await importPack(await f.arrayBuffer(), f.name); ok++; autoLyrics(f.name.replace(/\.song$/i, '')); } catch (err) { toast(`Couldn't add ${f.name}: ${err.message}`, 4000); }
   }
   e.target.value = '';
-  if (ok) toast(`Added ${ok} song${ok > 1 ? 's' : ''}`);
+  if (ok) { toast(`Added ${ok} song${ok > 1 ? 's' : ''}`); keepStorage(); } // ask again right after a tap (some browsers want one)
   renderLibrary();
 };
 
@@ -1269,7 +1269,21 @@ addEventListener('keydown', e => { if (e.code === 'Space' && S?.mode === 'sync')
 // ---------- settings ----------
 const dlg = $('#settingsDlg');
 let micTestOn = false;
+// ---------- keep the song library (user, 2026-11-24, after losing it: "add the permanent storage
+// request"). Without it a browser may clear the app's songs when the device runs low on space. ----------
+async function keepStorage() {
+  if (!navigator.storage?.persist) return null; // browser can't promise it
+  try { return (await navigator.storage.persisted()) || (await navigator.storage.persist()); } catch { return false; }
+}
+async function showStorage() {
+  const ok = await keepStorage();
+  $('#storeInfo').textContent = ok ? '💾 Songs are kept permanently on this device.'
+    : ok === null ? "💾 This browser can't promise to keep the songs: keep the .song files in Drive."
+    : '💾 The browser may clear the songs if space runs low. Installing the app (Add to Home Screen) usually lets it keep them.';
+}
+keepStorage();
 $('#btnSettings').onclick = () => {
+  showStorage();
   $('#setDifficulty').value = settings.difficulty;
   $('#setPass').value = settings.passTarget; $('#passOut').textContent = settings.passTarget;
   showLatency(); fillMicLists();
@@ -1341,7 +1355,7 @@ function releaseWake() { wake?.release().catch(() => {}); wake = null; }
 
 // ---------- boot ----------
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
-  navigator.serviceWorker.register('sw.js?v=202611240017', { updateViaCache: 'none' });
+  navigator.serviceWorker.register('sw.js?v=202611240021', { updateViaCache: 'none' });
   // new version installed -> reload once, but never in the middle of a song
   const hadController = !!navigator.serviceWorker.controller;
   navigator.serviceWorker.addEventListener('controllerchange', () => {

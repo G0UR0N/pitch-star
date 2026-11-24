@@ -21,6 +21,7 @@ Tools live in `%USERPROFILE%\PitchScoreGameTools` (Python env, ffmpeg, uv). Not 
 - Game URL: https://g0ur0n.github.io/pitch-star/app/
 - iPhone (Safari): Share → **Add to Home Screen**. Android (Chrome): ⋮ → **Install app**.
 - Songs: `G:\My Drive\PitchStar` syncs through Google Drive. On the phone tap **Add songs** → browse Google Drive → `PitchStar` → pick `.song` files. They're stored in the app and work offline.
+- Keeping songs (2026-11-24, after a device lost its song library): the app asks the browser to keep its storage permanently, at start and after each Add songs. ⚙️ Settings shows the result. Installed apps (Home Screen / Install app) are usually allowed; a plain browser tab may be refused. Drive stays the master copy: re-add from `PitchStar`, and save edits with ☁️. On an iPhone, Safari and the Home Screen app keep separate song libraries.
 - App updates: after code changes run `publish.ps1` (right-click → Run with PowerShell).
 
 ## Play

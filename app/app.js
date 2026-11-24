@@ -1,8 +1,8 @@
 // ?v= stamps are rewritten by publish.ps1 so every publish loads fresh files past GitHub's CDN cache
-import { readZip, writeZip } from './zip.js?v=202611232328';
-import * as db from './db.js?v=202611232328';
-import { detectPitch } from './pitch.js?v=202611232328';
-import { framesToNotes, placeOctave, toPhrases, noteRange } from './melody.js?v=202611232328';
+import { readZip, writeZip } from './zip.js?v=202611232333';
+import * as db from './db.js?v=202611232333';
+import { detectPitch } from './pitch.js?v=202611232333';
+import { framesToNotes, placeOctave, toPhrases, noteRange } from './melody.js?v=202611232333';
 
 const $ = s => document.querySelector(s);
 const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
@@ -98,7 +98,7 @@ async function renderLibrary() {
   }
   for (const s of songs) {
     const el = document.createElement('div'); el.className = 'card song';
-    el.innerHTML = `<div class="meta"><b></b><small class="desc"></small><small>${s.meta.start ? `${fmtTime(s.meta.start)}–` : ''}${fmtTime(s.meta.duration)} · ${s.meta.phrases.length} sections${best[s.id] != null ? ` · best ${best[s.id]}` : ''}${s.meta.edited ? ' · ✎ own melody' : ''}</small><button class="chip" data-a="folder"></button>${s.meta.lyricsCheck?.stale ? '<button class="btn small warn" data-a="readd">⚠ Lyrics need an update: tap, then pick this song from Drive</button>' : ''}</div>
+    el.innerHTML = `<div class="meta"><b></b><small class="desc"></small><small>${s.meta.start ? `${fmtTime(s.meta.start)}–` : ''}${fmtTime(s.meta.duration)} · ${s.meta.phrases.length} sections${best[s.id] != null ? ` · best ${best[s.id]}` : ''}${s.meta.edited ? ' · ✎ own melody' : ''}</small><button class="chip" data-a="folder"></button>${s.meta.lyricsCheck?.stale ? '<button class="btn small warn" data-a="readd">⚠ Lyrics need an update: tap, then pick this song from Drive</button>' : ''}${unsavedEdits(s.meta) ? '<button class="btn small warn" data-a="saveEd">☁️ Save edits to Drive (so other devices get them)</button>' : ''}</div>
       <div class="actions">
         <button class="btn primary small" data-a="sing">▶ Sing</button>
         <button class="icon" data-a="edit" title="Rename" aria-label="Rename">✏️</button>
@@ -112,6 +112,7 @@ async function renderLibrary() {
     const desc = songDesc(s), dEl = el.querySelector('.desc');
     if (desc) dEl.textContent = desc; else dEl.remove();
     el.querySelector('[data-a=readd]')?.addEventListener('click', () => $('#importInput').click());
+    el.querySelector('[data-a=saveEd]')?.addEventListener('click', () => saveEdits(s.id));
     const g = songGroup(s), fb = el.querySelector('[data-a=folder]');
     fb.textContent = g ? `📁 ${g}` : '📁 Add to folder';
     fb.onclick = () => openFolderDlg(s);
@@ -195,12 +196,52 @@ $('#btnEdSave').onclick = async () => {
   $('#editDlg').close(); renderLibrary();
 };
 
+// ---------- edits -> Drive (user, 2026-11-23: "pull my edits into the source files so that other
+// devices can pull them in as the master source"). Every local edit stamps meta.editedAt.
+// ☁️ writes <id>.edits.txt (JSON) into Drive; tools\merge_edits.py folds it into the master pack
+// and stamps the pack's meta.editsMerged with the edit time. ----------
+const unsavedEdits = m => !!m.editedAt && !((m.editsSaved || 0) >= m.editedAt);
+async function saveEdits(id) {
+  const s = await db.getSong(id), m = s.meta;
+  const ed = {
+    type: 'pitchstar-edits', version: 1, song: id, title: s.title, saved: new Date().toISOString(), editedAt: m.editedAt,
+    notes: m.edited ? m.notes : undefined,
+    start: m.start || undefined,
+    end: m.fullDuration && m.duration < m.fullDuration - 0.5 ? m.duration : undefined,
+    name: m.name, group: m.group,
+    lyrics: m.lyrics?.length ? m.lyrics : undefined,
+    lyricsManual: m.lyricsCheck?.source === 'manual' || undefined,
+  };
+  const name = `${id}.edits.txt`;
+  const file = new File([JSON.stringify(ed)], name, { type: 'text/plain' });
+  try {
+    if (window.showSaveFilePicker) { // desktop Chrome/Edge: save straight into G:\My Drive\PitchStar
+      const h = await showSaveFilePicker({ suggestedName: name, types: [{ description: 'Pitch Star edits', accept: { 'text/plain': ['.txt'] } }] });
+      const w = await h.createWritable(); await w.write(file); await w.close();
+    } else if (navigator.canShare?.({ files: [file] })) { // phone: share sheet -> Drive -> PitchStar
+      await navigator.share({ files: [file], title: `${songName(s)} edits` });
+    } else {
+      const a = document.createElement('a'); a.href = URL.createObjectURL(file); a.download = name; a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+    }
+  } catch (e) { if (e.name === 'AbortError') return; toast(`Couldn't save: ${e.message}`, 4000); return; }
+  s.meta.editsSaved = Date.now(); await db.putSong(s);
+  toast('Edits saved ✓  Put them in Drive → PitchStar; the PC merges them into the song.', 5000);
+  renderLibrary();
+}
+
 async function importPack(buf, fname) {
   const z = await readZip(buf);
   const meta = JSON.parse(new TextDecoder().decode(z['song.json']));
   const id = (fname || meta.title).replace(/\.song$/i, '');
   // re-adding an updated pack keeps the name and folder chosen on this phone
   const old = await db.getSong(id);
+  // don't silently throw away edits made here that the Drive pack doesn't have yet
+  if (old?.meta?.editedAt && !((meta.editsMerged || 0) >= old.meta.editedAt) &&
+      !confirm(`"${songName(old)}" has edits on this device that this Drive file doesn't have yet` +
+        `${unsavedEdits(old.meta) ? ' (not saved with ☁️)' : ' (saved, but not merged on the PC yet)'}.\n\nReplace them with the Drive version?`)) {
+    throw new Error('kept your edits');
+  }
   for (const k of ['name', 'group']) if (old?.meta?.[k] !== undefined && meta[k] === undefined) meta[k] = old.meta[k]; // '' (no folder) is kept too
   dropUnverified(meta); // an old pack file still carries unverified lyrics
   await db.putSong({
@@ -463,7 +504,7 @@ function edChanged() {
   const id = S.song.id, notes = S.notes;
   edTimer = setTimeout(async () => {
     const song = await db.getSong(id);
-    song.meta = { ...song.meta, notes, phrases: toPhrases(notes), range: noteRange(notes), edited: true };
+    song.meta = { ...song.meta, notes, phrases: toPhrases(notes), range: noteRange(notes), edited: true, editedAt: Date.now() };
     await db.putSong(song);
     if (S?.song.id === id) S.meta = song.meta;
   }, 400);
@@ -926,7 +967,7 @@ $('#btnRecKeep').onclick = async () => {
   const kept = S.notes.filter(n => n.t + n.d <= t0 || n.t >= t1);
   const notes = kept.concat(S.rec.preview).sort((a, b) => a.t - b.t);
   const song = await db.getSong(id);
-  song.meta = { ...song.meta, notes, phrases: toPhrases(notes), range: noteRange(notes), edited: true };
+  song.meta = { ...song.meta, notes, phrases: toPhrases(notes), range: noteRange(notes), edited: true, editedAt: Date.now() };
   await db.putSong(song);
   const sel = S.rec.sel;
   closeSession();
@@ -955,7 +996,8 @@ async function trimSong(id) {
   const notes = s.meta.notes.filter(n => n.t >= start && n.t < end)
     .map(n => (n.t + n.d > end ? { ...n, d: +(end - n.t).toFixed(3) } : n)).filter(n => n.d >= 0.08);
   if (!notes.length) { toast('No singing left between those times'); return; }
-  s.meta = { ...s.meta, start: start || undefined, duration: Math.min(end, s.meta.duration), notes, phrases: toPhrases(notes),
+  s.meta = { ...s.meta, editedAt: Date.now(), fullDuration: s.meta.fullDuration ?? s.meta.duration,
+    start: start || undefined, duration: Math.min(end, s.meta.duration), notes, phrases: toPhrases(notes),
     range: noteRange(notes), lyrics: (s.meta.lyrics || []).filter(l => l.t == null || (l.t >= start - 1 && l.t < end)) };
   await db.putSong(s);
   toast(`Song now plays ${fmtTime(start)} – ${fmtTime(end)} ✓`);
@@ -1057,7 +1099,7 @@ $('#btnLyFind').onclick = async () => {
 async function saveLyrics() {
   const lines = $('#lyText').value.split('\n').map(l => l.trim()).filter(Boolean);
   const s = await db.getSong(lyId);
-  s.meta = { ...s.meta, lyricsTried: true, lyricsCheck: { source: 'manual' }, // picked/typed by the user = checked by the user
+  s.meta = { ...s.meta, editedAt: Date.now(), lyricsTried: true, lyricsCheck: { source: 'manual' }, // picked/typed by the user = checked by the user
     lyrics: lines.map((text, i) => ({ t: lyTimes ? lyTimes[i] : null, text })) };
   await db.putSong(s);
   return s;
@@ -1139,7 +1181,7 @@ async function finishSync() {
   pause();
   const id = S.song.id, times = S.sync.times;
   const s = await db.getSong(id);
-  s.meta = { ...s.meta, lyrics: s.meta.lyrics.map((l, i) => ({ ...l, t: times[i] ?? l.t })) };
+  s.meta = { ...s.meta, editedAt: Date.now(), lyrics: s.meta.lyrics.map((l, i) => ({ ...l, t: times[i] ?? l.t })) };
   await db.putSong(s);
   closeSession(); toast('Lyrics timing saved ✓');
   openSong(id);
@@ -1222,7 +1264,7 @@ function releaseWake() { wake?.release().catch(() => {}); wake = null; }
 
 // ---------- boot ----------
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
-  navigator.serviceWorker.register('sw.js?v=202611232328', { updateViaCache: 'none' });
+  navigator.serviceWorker.register('sw.js?v=202611232333', { updateViaCache: 'none' });
   // new version installed -> reload once, but never in the middle of a song
   const hadController = !!navigator.serviceWorker.controller;
   navigator.serviceWorker.addEventListener('controllerchange', () => {

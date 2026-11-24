@@ -40,6 +40,14 @@ Tools live in `%USERPROFILE%\PitchScoreGameTools` (Python env, ffmpeg, uv). Not 
   - 🗑 deletes it.
   - Every change is saved on the phone at once (the card shows "✎ own melody"). ⤓ exports the pack to keep it in Drive.
 
+## Edits → Drive master (user, 2026-11-23: "pull my edits into the source files so that other devices can pull them in as the master source")
+1. Edit on any device (notes, 🎙️ melody, ✂️ trim, 📝 lyrics, tap-sync). The card then shows **☁️ Save edits to Drive**.
+2. Tap it. On the phone the share sheet opens: pick **Drive → PitchStar**. On the PC a save box opens: pick `G:\My Drive\PitchStar`. It writes `<song>.edits.txt` (small; it holds the notes, trim, name, folder and lyrics).
+3. On the PC run `tools\merge_edits.py` (venv python), or ask Claude. It folds the newest edits file for each song into the master `.song`: notes replaced, trim applied (audio cut, times shifted), name and folder set, lyrics you typed kept. The pack is backed up to `PitchScoreGameTools\backup` first, the edits file moves to `PitchStar\merged`, and the report goes to `tools\merge_edits.log`.
+4. Other devices: **Add songs** → pick the song again. Re-adding keeps nothing from before except name and folder; the master now holds the edits.
+- Safety: if this device has edits the Drive file doesn't have yet, re-adding asks before replacing them.
+- The master is protected. `prep.py` won't rebuild a pack holding your edits unless you pass `--force`, and `lyrics_check --fix` leaves lyrics you typed alone.
+
 ## Fix a melody by singing it (🎙️)
 Best on the PC in Chrome/Edge (open the game URL), headphones on.
 1. ⚙️ → pick the **Microphone**, then **Auto-set delay** (say "tick" on each beep). Delay is saved per microphone; the mic picker is also on the play screen.

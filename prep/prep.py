@@ -25,6 +25,7 @@ FFMPEG = str(BIN / "ffmpeg.exe") if (BIN / "ffmpeg.exe").exists() else "ffmpeg"
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 HOP_S = 0.01  # pitch frame = 10 ms
+FORCE = False  # --force: rebuild a pack even if it holds the user's edits
 
 
 def log(msg):
@@ -872,6 +873,13 @@ def prep(src, force_kind=None):
     log(f"source: {src}")
     title, out = fetch(src)
     log(f"title: {title}")
+    # a pack holding the user's edits (merged from the app) is the master: don't rebuild over it
+    dest = SONGS_DIR / f"{slugify(title)}.song"
+    if dest.exists() and not FORCE:
+        with zipfile.ZipFile(dest) as z:
+            old = json.loads(z.read("song.json"))
+        if old.get("edited") or old.get("editsMerged") or old.get("trimmedStart"):
+            raise RuntimeError(f"{dest.name} holds your edits (notes/trim); add --force to rebuild it anyway")
     log(f"separating vocals on {DEVICE} (takes a minute or two)...")
     separate(out)
     kind = force_kind or ("vocal" if vocal_ratio(out) > 0.05 else "instrumental")
@@ -902,7 +910,11 @@ def prep(src, force_kind=None):
 
 
 def main():
+    global FORCE
     args = sys.argv[1:]
+    if "--force" in args:
+        FORCE = True
+        args.remove("--force")
     force = None
     for flag, k in (("--instrumental", "instrumental"), ("--vocal", "vocal")):
         if flag in args:

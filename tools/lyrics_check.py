@@ -29,6 +29,9 @@ for path in files:
         parts = {n: z.read(n) for n in z.namelist() if n != "song.json"}
     say(f"\n== {path.name}  [{meta.get('kind')}]")
     old = meta.get("lyrics") or []
+    if (meta.get("lyricsCheck") or {}).get("source") == "manual":
+        say("   lyrics typed/picked by the user (merged from the app): left alone")
+        continue
     if meta.get("kind") == "vocal":
         with tempfile.TemporaryDirectory() as td:
             mp3 = Path(td) / "vocals.mp3"

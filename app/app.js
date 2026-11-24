@@ -1,8 +1,8 @@
 // ?v= stamps are rewritten by publish.ps1 so every publish loads fresh files past GitHub's CDN cache
-import { readZip, writeZip } from './zip.js?v=202611231606';
-import * as db from './db.js?v=202611231606';
-import { detectPitch } from './pitch.js?v=202611231606';
-import { framesToNotes, placeOctave, toPhrases, noteRange } from './melody.js?v=202611231606';
+import { readZip, writeZip } from './zip.js?v=202611232241';
+import * as db from './db.js?v=202611232241';
+import { detectPitch } from './pitch.js?v=202611232241';
+import { framesToNotes, placeOctave, toPhrases, noteRange } from './melody.js?v=202611232241';
 
 const $ = s => document.querySelector(s);
 const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
@@ -46,7 +46,8 @@ function autoName(s) {
   const fromTitle = (parts.length > 1 && !DESCR.test(parts[1]) ? parts[1] : parts[0]) || s.title;
   // published title of the verified lyrics; the video's wording wins when it contains it
   // ("(all I want for Christmas is) My two front teeth" vs "All I Want for Christmas is my Two Front Teeth")
-  const pub = s.meta.lyricsCheck?.published?.split(' – ')[0]?.trim();
+  // lyrics read off the video's slides carry no song title ("on-screen lyrics (video slides)")
+  const pub = /^on-screen/.test(s.meta.lyricsCheck?.published || '') ? '' : s.meta.lyricsCheck?.published?.split(' – ')[0]?.trim();
   if (!pub) return fromTitle;
   const core = normW(pub.replace(/\(.*?\)/g, ''));
   return core && normW(fromTitle).includes(core) ? fromTitle : pub.replace(/[()]/g, '').replace(/\s+/g, ' ').trim();
@@ -939,9 +940,18 @@ function buildLyrics() {
     const words = l.text.split(/\s+/);
     const ns = S.notes.filter(n => n.t >= t0 - 0.2 && n.t < t1 - 0.1);
     const wt = words.map((_, k) => ns.length ? ns[Math.floor((k * ns.length) / words.length)].t : t0 + (k * (t1 - t0)) / words.length);
-    S.lyr.push({ t0, words, wt });
+    S.lyr.push({ t0, words, wt, who: l.who || '', spoken: !!l.spoken });
   });
   S.lyIdx = -2;
+}
+// Who sings the line (parts read off the video's slides, 2026-11-23). One steady colour per name.
+const WHO_COL = ['#5fb4ff', '#4be3a0', '#ff9b5f', '#c99bff', '#ff5fa2', '#ffd23f'];
+function whoTag(l) {
+  const b = document.createElement('b'); b.className = 'who';
+  let h = 0; for (const c of l.who) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  b.style.background = /^all$/i.test(l.who) ? '#8f82b8' : WHO_COL[h % WHO_COL.length];
+  b.textContent = l.who + (l.spoken ? ' (spoken)' : '');
+  return b;
 }
 function lyricsTick(ts) {
   const box = $('#lyrics');
@@ -953,8 +963,12 @@ function lyricsTick(ts) {
   if (i !== S.lyIdx) {
     S.lyIdx = i;
     const cur = $('#lyCur'); cur.innerHTML = '';
+    cur.classList.toggle('spoken', !!S.lyr[i]?.spoken);
+    if (i >= 0 && S.lyr[i].who) cur.append(whoTag(S.lyr[i]));
     if (i >= 0) S.lyr[i].words.forEach((w, k) => { const sp = document.createElement('span'); sp.className = 'w'; sp.textContent = w + ' '; cur.append(sp); });
-    $('#lyNext').textContent = S.lyr[i + 1]?.words.join(' ') || '';
+    const nx = $('#lyNext'), n = S.lyr[i + 1]; nx.innerHTML = '';
+    if (n?.who && n.who !== S.lyr[i]?.who) nx.append(whoTag(n));
+    nx.append(n?.words.join(' ') || '');
   }
   if (i >= 0) {
     const spans = $('#lyCur').children, wt = S.lyr[i].wt;
@@ -1069,7 +1083,7 @@ function releaseWake() { wake?.release().catch(() => {}); wake = null; }
 
 // ---------- boot ----------
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
-  navigator.serviceWorker.register('sw.js?v=202611231606', { updateViaCache: 'none' });
+  navigator.serviceWorker.register('sw.js?v=202611232241', { updateViaCache: 'none' });
   // new version installed -> reload once, but never in the middle of a song
   const hadController = !!navigator.serviceWorker.controller;
   navigator.serviceWorker.addEventListener('controllerchange', () => {

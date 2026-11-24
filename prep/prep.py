@@ -584,12 +584,15 @@ def make_lyrics(title, vocals_wav, notes=None):
             out["reason"] = f"below {LYRIC_SHIP:.0%} certainty; {len(info['ask'])} rough part(s) need a human ear"
         return [], out
     log(f"lyrics: shipped, match {info['agree']:.0%}, sung time covered {cov:.0%}")
-    return [{"t": l["t"], "text": l["text"]} for l in lines], info
+    return [{k: v for k, v in l.items() if k != "i"} for l in lines], info
 
 
 # Human answers for rough parts, kept in the songs folder (Drive; not in the public repo:
 # it holds lyric text): {"<song title>": [{"t": seconds, "text": "the sung line"}]}.
 ANSWERS = SONGS_DIR / "lyrics_answers.json"
+# Lyrics read off a video's slides (tools/video_frames.py + slide_changes.py), same place:
+# {"<song title>": [{"text": "...", "who": "Jasmine", "spoken": true?}]}
+ONSCREEN = SONGS_DIR / "lyrics_onscreen.json"
 
 
 def use_answers(title, lines, info, pub, counts, bad, spans, notes):
@@ -616,7 +619,7 @@ def use_answers(title, lines, info, pub, counts, bad, spans, notes):
         else:
             parts.append(list(r))
     try:
-        answers = json.loads(ANSWERS.read_text(encoding="utf-8")).get(title, [])
+        answers = json.loads(ANSWERS.read_text(encoding="utf-8-sig")).get(title, [])
     except (OSError, ValueError):
         answers = []
     matched, total = counts
@@ -668,6 +671,15 @@ def _make_lyrics(title, vocals_wav, notes=None):
     except Exception as e:
         log(f"lyrics: published-lyrics lookup failed ({e}); using what was heard")
         cands = []
+    # Lyrics read off the video's own slides, with who sings each line (user, 2026-11-23:
+    # "use screen snips from the video to derive the lyrics ... several parts/singers").
+    # Checked against the singing like any published version.
+    try:
+        scr = json.loads(ONSCREEN.read_text(encoding="utf-8-sig")).get(title)  # -sig: files saved by Windows tools start with a BOM
+    except (OSError, ValueError):
+        scr = None
+    if scr:
+        cands = [{"name": "on-screen lyrics (video slides)", "lines": [l["text"] for l in scr], "parts": scr}] + cands
     best = (None, *align_lyrics(segs))  # Whisper only
     for c in cands[:40]:
         lines, agree = align_lyrics(segs, c["lines"])
@@ -678,6 +690,12 @@ def _make_lyrics(title, vocals_wav, notes=None):
         # Re-listening to unconfirmed lines on their own was tried and removed (2026-11-23): it
         # fixed nothing and cost two packs (It's Beginning… coverage 100% -> 94%). Humans answer instead.
         lines, agree = align_lyrics(segs, c["lines"])  # re-run to keep its dropped list
+        for l in lines:  # singer parts from on-screen lyrics
+            p = c.get("parts", [None] * (l["i"] + 1))[l["i"]] or {}
+            if p.get("who"):
+                l["who"] = p["who"]
+            if p.get("spoken"):
+                l["spoken"] = True
         info = {"source": "heard+published", "published": c["name"], "agree": round(agree, 2),
                 "unconfirmed": align_lyrics.dropped, "spans": align_lyrics.spans,
                 "pub": c["lines"], "counts": align_lyrics.counts, "bad": align_lyrics.dropped_segs}

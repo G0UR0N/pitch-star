@@ -1,6 +1,6 @@
 :root {
   --bg: #1b1035; --panel: #2a1b52; --panel2: #36246a; --text: #f4efff; --dim: #b7a9d9;
-  --accent: #ff5fa2; --gold: #ffd23f; --good: #4be3a0; --close: #9fd0ff; --miss: #ff6b6b; --bar: #7c6cff;
+  --accent: #ff5fa2; --gold: #ffd23f; --good: #4be3a0; --close: #9fd0ff; --check: #7fe7c4; --miss: #ff6b6b; --bar: #7c6cff;
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
@@ -84,6 +84,9 @@ select { font: inherit; background: var(--panel2); color: var(--text); border: 0
 .editPanel { flex-wrap: wrap; justify-content: center; }
 .editPanel[hidden] { display: none; }
 #edInfo { flex: 1 1 120px; text-align: center; }
+.edCheck { flex: 1 1 100%; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px; }
+.edCheck[hidden] { display: none; }
+#edFlagInfo { flex: 1 1 100%; text-align: center; color: var(--check); }
 .edScrub { flex: 1 1 100%; display: flex; align-items: center; gap: 10px; color: var(--dim); font-variant-numeric: tabular-nums; }
 .edScrub input { flex: 1; accent-color: var(--accent); height: 28px; }
 .pinfo { flex: 1; display: flex; flex-direction: column; align-items: center; }

@@ -51,6 +51,26 @@ Tools live in `%USERPROFILE%\PitchScoreGameTools` (Python env, ffmpeg, uv). Not 
   - 🗑 deletes it.
   - Every change is saved on the phone at once (the card shows "✎ own melody"). ⤓ exports the pack to keep it in Drive.
 
+## Check singer: a second opinion on the targets (user, 2026-11-24: "make a singer tool that sings without melisma along with the song as it understands it without looking at the pitch markers ... as a means of validating the pitch markers as well placed or not")
+- On the PC, run `tools\check_notes.py` (all packs in `PitchStar\Songs`, or give a name part such as `palace`). It works out the tune again **without reading the targets**, in a different way from prep:
+  - It uses a different pitch tracker (pYIN instead of CREPE) on the pack's vocals.
+  - It sings one note per syllable. A syllable starts at a vocal attack or after a breath, and its pitch is the one held longest. Melisma, scoops and vibrato are ignored. A second pitch is kept only if it is held at least 0.35 s.
+- It lists where it disagrees with the targets, in `tools\check_notes.log`. It saves its tune in the pack as `check` and backs the pack up to `PitchScoreGameTools\backup` first. It changes no targets.
+- It flags four kinds of spot:
+  - a different note, by at least 0.7 semitone and ignoring octaves (scoring ignores them too);
+  - no singing under a target;
+  - a target running more than 0.3 s past the end of the singing;
+  - singing of 0.3 s or longer with no target (a missing note).
+- In the app, re-add the song from Drive. If this device has edits the Drive file doesn't have, answer "Cancel" to keep them; the check tune is still added. Then in **✎ Edit notes**:
+  - Dashed green outlines show the check singer's tune.
+  - ⚠ marks the targets it disagrees with.
+  - **⚠ next** steps through the flagged spots.
+  - **🔔 check singer** plays its tune instead of the targets while the song plays, so you can hear which one fits.
+  - **use 🔔 pitch** sets the picked note to the check singer's note.
+- It is a second opinion, not the truth. Your ear decides.
+  - Backing singers or a harmony line can pull it to another note, as at 1:34–1:37 of These Palace Walls.
+  - Spoken intros show up as "missing notes".
+
 ## Edits → Drive master (user, 2026-11-23: "pull my edits into the source files so that other devices can pull them in as the master source")
 1. Edit on any device (notes, 🎙️ melody, ✂️ trim, 📝 lyrics, tap-sync). The card then shows **☁️ Save edits to Drive**.
 2. Tap it. On the phone the share sheet opens: pick **Drive → PitchStar → PrepFiles**. On the PC a save box opens: pick `G:\My Drive\PitchStar\PrepFiles`. It writes `<song>.edits.txt` (small; it holds the notes, trim, name, folder and lyrics).

@@ -44,6 +44,9 @@ def trim_pack(meta, audio, start, end):
         lyrics=[{**l, "t": round(l["t"] - start, 2) if l.get("t") is not None else None}
                 for l in meta.get("lyrics", []) if l.get("t") is None or start - 1 <= l["t"] < end],
     )
+    if meta.get("check"):  # the check singer's tune (check_notes.py) moves with the audio too
+        meta["check"] = {**meta["check"], "notes": [
+            {**c, "t": round(c["t"] - start, 3)} for c in meta["check"]["notes"] if start <= c["t"] < end]}
     meta.pop("fullDuration", None)
     if start:
         meta["trimmedStart"] = round(meta.get("trimmedStart", 0) + start, 2)  # seconds cut from the original

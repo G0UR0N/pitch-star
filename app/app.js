@@ -1,8 +1,8 @@
 // ?v= stamps are rewritten by publish.ps1 so every publish loads fresh files past GitHub's CDN cache
-import { readZip, writeZip } from './zip.js?v=202611240135';
-import * as db from './db.js?v=202611240135';
-import { detectPitch } from './pitch.js?v=202611240135';
-import { framesToNotes, placeOctave, toPhrases, noteRange } from './melody.js?v=202611240135';
+import { readZip, writeZip } from './zip.js?v=202611241329';
+import * as db from './db.js?v=202611241329';
+import { detectPitch } from './pitch.js?v=202611241329';
+import { framesToNotes, placeOctave, toPhrases, noteRange } from './melody.js?v=202611241329';
 
 const $ = s => document.querySelector(s);
 const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
@@ -241,6 +241,11 @@ async function importPack(buf, fname) {
   if (old?.meta?.editedAt && !((meta.editsMerged || 0) >= old.meta.editedAt) &&
       !confirm(`"${songName(old)}" has edits on this device that this Drive file doesn't have yet` +
         `${unsavedEdits(old.meta) ? ' (not saved with ☁️)' : ' (saved, but not merged on the PC yet)'}.\n\nReplace them with the Drive version?`)) {
+    // keeping the edits here still takes a new check-singer tune from the Drive file
+    if (meta.check && meta.check.at !== old.meta.check?.at) {
+      old.meta = { ...old.meta, check: meta.check }; await db.putSong(old);
+      throw new Error('kept your edits here, added the 🔔 check singer');
+    }
     throw new Error('kept your edits');
   }
   for (const k of ['name', 'group']) if (old?.meta?.[k] !== undefined && meta[k] === undefined) meta[k] = old.meta[k]; // '' (no folder) is kept too
@@ -364,6 +369,9 @@ async function openSong(id, opts = {}) {
     mode: 'song', queue: [], qi: 0, attempts: [], passes: 0, guideStale,
   };
   S.trace = traceFor(song);
+  S.flags = checkFlags();
+  $('#edCheckRow').hidden = !m.check?.notes?.length;
+  $('#edCheckSing').checked = false; $('#edFlagInfo').textContent = '';
   $('#melodyTog').checked = guideStale || !!opts.hearNotes;
   $('#recPanel').hidden = true; $('#syncPanel').hidden = true;
   $('#lyricsTog').checked = settings.lyrics;
@@ -510,7 +518,71 @@ function beep(p) {
 function edShow() {
   const n = S.notes[S.sel];
   $('#edInfo').textContent = n ? `${noteName(n.p)} at ${fmtTime(n.t)}.${String(Math.floor((n.t % 1) * 10))} · ${n.d.toFixed(2)} s` : 'Tap a note to pick it';
+  if (S.meta.check) {
+    const fs = (S.flags || []).filter(f => f.i === S.sel && S.sel != null);
+    $('#edFlagInfo').textContent = fs.length ? '⚠ ' + fs.map(f => f.msg).join(' · ') : n ? '🔔 agrees with this note' : '';
+  }
 }
+
+// ---------- check singer (user, 2026-11-24: "make a singer tool that sings without melisma along
+// with the song as it understands it without looking at the pitch markers ... as a means of
+// validating the pitch markers"). tools\check_notes.py works out the tune again a different way
+// (pYIN pitch, one note per sung syllable) and stores it as meta.check. Edit mode draws it as
+// dashed outlines, marks the targets it disagrees with (⚠), and 🔔 plays it instead of the targets.
+// Same rules as check_notes.py compare(); octaves are ignored, like scoring.
+const fold12 = d => ((((d + 6) % 12) + 12) % 12) - 6;
+const ovl = (a, b) => Math.max(0, Math.min(a.t + a.d, b.t + b.d) - Math.max(a.t, b.t));
+function checkHits(n) {
+  const ck = S.meta.check?.notes || [];
+  return ck.filter(c => c.t < n.t + n.d && c.t + c.d > n.t);
+}
+function checkFlags() {
+  const ck = S.meta.check?.notes;
+  if (!ck?.length) return [];
+  const out = [];
+  S.notes.forEach((n, i) => {
+    const hits = checkHits(n), sung = hits.reduce((s, c) => s + ovl(n, c), 0);
+    if (sung < 0.3 * n.d) { out.push({ t: n.t, i, msg: `the check singer hears no singing under this ${noteName(n.p)}` }); return; }
+    const by = new Map();
+    for (const c of hits) { const k = fold12(c.p - n.p); by.set(k, (by.get(k) || 0) + ovl(n, c)); }
+    const [k, share] = [...by].sort((a, b) => b[1] - a[1])[0];
+    const main = hits.filter(c => fold12(c.p - n.p) === k).sort((a, b) => ovl(n, b) - ovl(n, a))[0];
+    if (k && share >= 0.5 * n.d && Math.abs(fold12((main.c ?? main.p) - n.p)) >= 0.7)
+      out.push({ t: n.t, i, msg: `check singer sings ${noteName(n.p + k)} here, not ${noteName(n.p)}` });
+    const last = Math.max(...hits.map(c => c.t + c.d));
+    if (n.t + n.d - last > 0.3 && n.d > 0.5) out.push({ t: n.t, i, msg: `singing stops ${(n.t + n.d - last).toFixed(1)} s before this note ends (too long?)` });
+  });
+  for (const c of ck) {
+    if (c.d < 0.3) continue;
+    const cov = S.notes.reduce((s, n) => s + ovl(c, n), 0);
+    if (cov < 0.3 * c.d) out.push({ t: c.t, i: -1, c, msg: `check singer sings ${noteName(c.p)} for ${c.d.toFixed(1)} s with no target here (missing note? ＋ adds one)` });
+  }
+  return out.sort((a, b) => a.t - b.t);
+}
+$('#edCheckSing').onchange = () => { if (S) S.checkSing = $('#edCheckSing').checked; };
+$('#edFlag').onclick = () => {
+  if (!S?.edit) return;
+  if (!S.flags.length) { $('#edFlagInfo').textContent = '🔔 agrees with every target ✓'; return; }
+  // step through the list; if a different note was picked meanwhile, carry on from that note
+  const cur = S.flags[S.flagK];
+  let k;
+  if (cur && (cur.i < 0 ? S.sel == null : cur.i === S.sel)) k = (S.flagK + 1) % S.flags.length;
+  else {
+    const base = S.sel != null && S.notes[S.sel] ? S.notes[S.sel].t + 0.001 : songTime();
+    k = Math.max(0, S.flags.findIndex(f => f.t >= base));
+  }
+  const f = S.flags[k]; S.flagK = k;
+  if (f.i >= 0) { edSelect(f.i); seek(Math.max(0, f.t - 1)); }
+  else { S.sel = null; seek(Math.max(0, f.t - 1)); edShow(); }
+  $('#edFlagInfo').textContent = `⚠ ${k + 1}/${S.flags.length} at ${fmtTenth(f.t)}: ${f.msg}`;
+};
+$('#edTake').onclick = () => {
+  const n = S?.notes[S.sel];
+  if (!n) { toast('Tap a note first'); return; }
+  const c = checkHits(n).sort((a, b) => ovl(n, b) - ovl(n, a))[0];
+  if (!c) { toast('The check singer sings nothing under this note'); return; }
+  edApply(x => { x.p += fold12(c.p - x.p); beep(x.p); });
+};
 function edSelect(i) {
   if (!S.notes.length) { S.sel = null; edShow(); return; }
   S.sel = Math.max(0, Math.min(S.notes.length - 1, i));
@@ -524,6 +596,7 @@ function edChanged() {
   S.phrases = toPhrases(S.notes);
   S.stats = null; resetStats();
   S.ni = S.ji = lowerBound(songTime());
+  S.flags = checkFlags();
   edShow();
   clearTimeout(edTimer);
   const id = S.song.id, notes = S.notes;
@@ -707,8 +780,9 @@ function judge(ts) {
 function melody(t) {
   if (!melGain) return;
   const listen = S.mode === 'record' && S.rec?.listening;
-  const list = listen ? S.rec.preview : S.notes;
-  const on = (listen || $('#melodyTog').checked) && S.running && (S.mode !== 'record' || listen);
+  const check = S.edit && S.checkSing && S.meta.check?.notes; // 🔔 the check singer sings its own tune
+  const list = listen ? S.rec.preview : check || S.notes;
+  const on = (listen || check || $('#melodyTog').checked) && S.running && (S.mode !== 'record' || listen);
   let lo = 0, hi = list.length;
   while (lo < hi) { const m = (lo + hi) >> 1; if (list[m].t + list[m].d < t) lo = m + 1; else hi = m; }
   const n = list[lo];
@@ -768,6 +842,22 @@ function draw(t, ts) {
     }
     const bh = Math.max(6 * dpr, rowH * 0.75);
     roundRect(x(n.t), y(n.p) - bh / 2, Math.max(2, n.d * pps - 2 * dpr), bh, bh / 2, col);
+  }
+  // edit mode: the check singer's tune (dashed, folded to the targets' octave) and ⚠ where it disagrees
+  if (S.edit && S.meta.check?.notes) {
+    const bh = Math.max(6 * dpr, rowH * 0.75), oct = (p, tt) => { const r = S.notes[Math.min(S.notes.length - 1, lowerBound(tt))]?.p ?? p; return p - 12 * Math.round((p - r) / 12); };
+    g.save(); g.strokeStyle = css('--check'); g.lineWidth = 2 * dpr; g.setLineDash([5 * dpr, 4 * dpr]);
+    for (const c of S.meta.check.notes) {
+      if (c.t > t1 || c.t + c.d < t0) continue;
+      g.strokeRect(x(c.t), y(oct(c.p, c.t)) - bh / 2, Math.max(2, c.d * pps - 2 * dpr), bh);
+    }
+    g.setLineDash([]); g.fillStyle = css('--check'); g.font = `bold ${15 * dpr}px system-ui`; g.textAlign = 'center';
+    for (const f of S.flags || []) {
+      if (f.t > t1 || f.t < t0 - 3) continue;
+      const p = f.i >= 0 ? S.notes[f.i].p : oct(f.c.p, f.t);
+      g.fillText('⚠', x(f.t) + 7 * dpr, y(p) - bh / 2 - 9 * dpr);
+    }
+    g.restore();
   }
   // edit mode: the whole sung trace, folded to the octave of the nearest target note
   if (S.edit && S.trace) {
@@ -1355,7 +1445,7 @@ function releaseWake() { wake?.release().catch(() => {}); wake = null; }
 
 // ---------- boot ----------
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
-  navigator.serviceWorker.register('sw.js?v=202611240135', { updateViaCache: 'none' });
+  navigator.serviceWorker.register('sw.js?v=202611241329', { updateViaCache: 'none' });
   // new version installed -> reload once, but never in the middle of a song
   const hadController = !!navigator.serviceWorker.controller;
   navigator.serviceWorker.addEventListener('controllerchange', () => {

@@ -9,7 +9,7 @@
 <link rel="icon" href="icon.svg">
 <link rel="apple-touch-icon" href="icon-192.png">
 <title>Pitch Star</title>
-<link rel="stylesheet" href="style.css?v=202611240135">
+<link rel="stylesheet" href="style.css?v=202611241329">
 </head>
 <body>
 
@@ -70,6 +70,12 @@
     <button id="edNext" class="btn small" title="Next note">›</button>
     <span id="edInfo" class="hint">Tap a note to pick it</span>
     <button id="edDone" class="btn small primary">✓ Done</button>
+    <div id="edCheckRow" class="edCheck" hidden>
+      <label class="ctl tog"><input type="checkbox" id="edCheckSing"> 🔔 check singer</label>
+      <button id="edFlag" class="btn small" title="Jump to the next spot where the check singer disagrees">⚠ next</button>
+      <button id="edTake" class="btn small" title="Set the picked note to the check singer's pitch">use 🔔 pitch</button>
+      <span id="edFlagInfo" class="hint"></span>
+    </div>
   </div>
   <footer class="controls">
     <button id="btnPlay" class="btn primary">▶ Start</button>
@@ -170,6 +176,6 @@
 </dialog>
 
 <div id="toast" class="toast" hidden></div>
-<script type="module" src="app.js?v=202611240135"></script>
+<script type="module" src="app.js?v=202611241329"></script>
 </body>
 </html>

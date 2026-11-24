@@ -1,8 +1,8 @@
 // ?v= stamps are rewritten by publish.ps1 so every publish loads fresh files past GitHub's CDN cache
-import { readZip, writeZip } from './zip.js?v=202611241410';
-import * as db from './db.js?v=202611241410';
-import { detectPitch } from './pitch.js?v=202611241410';
-import { framesToNotes, placeOctave, toPhrases, noteRange } from './melody.js?v=202611241410';
+import { readZip, writeZip } from './zip.js?v=202611241419';
+import * as db from './db.js?v=202611241419';
+import { detectPitch } from './pitch.js?v=202611241419';
+import { framesToNotes, placeOctave, toPhrases, noteRange } from './melody.js?v=202611241419';
 
 const $ = s => document.querySelector(s);
 const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
@@ -512,14 +512,24 @@ $('#btnFwd10').onclick = () => skip(10);
 // "be able to delete or move/edit pitch targets"). Each change is saved right away. ----------
 function beep(p) {
   if (!ctx || SIM) return;
+  if (performance.now() - (beep.last || 0) < 40) return; // a mass edit beeps once
+  beep.last = performance.now();
   const o = ctx.createOscillator(), gn = ctx.createGain();
   o.type = 'triangle'; o.frequency.value = 440 * 2 ** ((p - 69) / 12);
   gn.gain.setValueAtTime(0.2, ctx.currentTime); gn.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
   o.connect(gn).connect(OUT); o.start(); o.stop(ctx.currentTime + 0.5);
 }
 function edShow() {
-  const n = S.notes[S.sel];
-  $('#edInfo').textContent = n ? `${noteName(n.p)} at ${fmtTime(n.t)}.${String(Math.floor((n.t % 1) * 10))} · ${n.d.toFixed(2)} s` : 'Tap a note to pick it';
+  const n = S.notes[S.sel], many = selected();
+  $('#edMulti').textContent = S.multiMode ? '☑ select many' : '☐ select many';
+  $('#edMulti').classList.toggle('primary', !!S.multiMode);
+  if (many.length > 1) {
+    const ps = many.map(x => x.p), last = many[many.length - 1];
+    $('#edInfo').textContent = `${many.length} notes · ${noteName(Math.min(...ps))}–${noteName(Math.max(...ps))} · ${fmtTenth(many[0].t)}–${fmtTenth(last.t + last.d)}`;
+    if (S.meta.check) $('#edFlagInfo').textContent = '';
+    return;
+  }
+  $('#edInfo').textContent = n ?`${noteName(n.p)} at ${fmtTime(n.t)}.${String(Math.floor((n.t % 1) * 10))} · ${n.d.toFixed(2)} s` : 'Tap a note to pick it';
   if (S.meta.check) {
     const fs = (S.flags || []).filter(f => f.i === S.sel && S.sel != null);
     $('#edFlagInfo').textContent = fs.length ? '⚠ ' + fs.map(f => f.msg).join(' · ') : n ? '🔔 agrees with this note' : '';
@@ -590,14 +600,65 @@ $('#edFlag').onclick = () => {
   $('#edFlagInfo').textContent = `⚠ ${k + 1}/${S.flags.length} at ${fmtTenth(f.t)}: ${f.msg}`;
 };
 $('#edTake').onclick = () => {
-  const n = S?.notes[S.sel];
-  if (!n) { toast('Tap a note first'); return; }
-  const c = checkHits(n).sort((a, b) => ovl(n, b) - ovl(n, a))[0];
-  if (!c) { toast('The check singer sings nothing under this note'); return; }
-  edApply(x => { x.p += fold12(c.p - x.p); beep(x.p); });
+  if (!selected().length) { toast('Tap a note first'); return; }
+  let none = 0;
+  edApply(x => { // each picked note takes the check singer's note under it
+    const c = checkHits(x).sort((a, b) => ovl(x, b) - ovl(x, a))[0];
+    if (c) { x.p += fold12(c.p - x.p); beep(x.p); } else none++;
+  });
+  if (none) toast(`The check singer sings nothing under ${none} of them`);
+};
+
+// ---------- several notes at once (user, 2026-11-24: "let me select multiple pitch markers for
+// mass shifting options"). S.multi holds the picked note objects (they survive re-sorting); every
+// edit button then works on all of them. S.sel stays the "first" note (🎤 lines it up). ----------
+function selected() {
+  if (!S) return [];
+  if (S.multi?.size) return [...S.multi].filter(n => S.notes.includes(n)).sort((a, b) => a.t - b.t);
+  return S.notes[S.sel] ? [S.notes[S.sel]] : [];
+}
+function toggleMulti(n) {
+  S.multi ??= new Set();
+  if (!S.multi.size && S.notes[S.sel] && S.notes[S.sel] !== n) S.multi.add(S.notes[S.sel]);
+  if (S.multi.has(n)) S.multi.delete(n); else { S.multi.add(n); beep(n.p); }
+  const first = selected()[0];
+  S.sel = first ? S.notes.indexOf(first) : null;
+  edShow();
+}
+function pushUndo() {
+  (S.undo ??= []).push(S.notes.map(n => ({ ...n })));
+  if (S.undo.length > 50) S.undo.shift();
+}
+$('#edMulti').onclick = () => {
+  if (!S?.edit) return;
+  S.multiMode = !S.multiMode;
+  if (!S.multiMode) { const f = selected()[0]; S.multi = new Set(); S.sel = f ? S.notes.indexOf(f) : S.sel; }
+  else if (S.notes[S.sel]) S.multi = new Set([S.notes[S.sel]]);
+  toast(S.multiMode ? 'Tap notes to add or remove them · › adds the next one' : 'One note at a time');
+  edShow();
+};
+$('#edView').onclick = () => {
+  if (!S?.edit || !S.geo) return;
+  const { t, pps, nowX } = S.geo, a = t - nowX / pps, b = t + (cv.width - nowX) / pps;
+  const vis = S.notes.filter(n => n.t + n.d > a && n.t < b);
+  if (!vis.length) { toast('No notes on screen'); return; }
+  S.multiMode = true; S.multi = new Set(vis); S.sel = S.notes.indexOf(vis[0]);
+  edShow();
+};
+$('#edUndo').onclick = () => {
+  if (!S?.edit) return;
+  const prev = S.undo?.pop();
+  if (!prev) { toast('Nothing to undo'); return; }
+  const firstT = selected()[0]?.t;
+  S.notes.splice(0, S.notes.length, ...prev);
+  S.multi = new Set();
+  edChanged();
+  S.sel = firstT != null ? Math.max(0, Math.min(S.notes.length - 1, lowerBound(firstT))) : null;
+  edShow(); toast('Undone');
 };
 function edSelect(i) {
   if (!S.notes.length) { S.sel = null; edShow(); return; }
+  if (!S.multiMode) S.multi = new Set();
   S.sel = Math.max(0, Math.min(S.notes.length - 1, i));
   const n = S.notes[S.sel];
   if (!S.running && (n.t < songTime() - 2.5 || n.t > songTime() + 4)) seek(Math.max(0, n.t - 1)); // bring it into view
@@ -621,15 +682,17 @@ function edChanged() {
   }, 400);
 }
 function edApply(f) {
-  const n = S?.notes[S.sel];
-  if (!n) { toast('Tap a note first'); return; }
-  f(n);
-  const keep = n; edChanged(); S.sel = S.notes.indexOf(keep); edShow();
+  const list = selected();
+  if (!list.length) { toast('Tap a note first'); return; }
+  pushUndo();
+  list.forEach(n => f(n));
+  const keep = list[0]; edChanged(); S.sel = S.notes.indexOf(keep); edShow();
 }
 $('#btnEdit').onclick = () => {
   if (!S || S.mode !== 'song') return;
   S.edit = !S.edit;
   $('#editPanel').hidden = !S.edit;
+  S.multiMode = false; S.multi = new Set();
   if (S.edit) { if (S.running) pause(); toast('Pause, tap a note, then fix it. Changes save as you go.'); edSelect(lowerBound(songTime())); }
   else S.sel = null;
 };
@@ -651,8 +714,23 @@ $('#edSlider').oninput = e => {
 };
 $('#edSlider').onchange = () => { if (S) S.scrubbing = false; };
 $('#edDone').onclick = () => { if (S?.edit) $('#btnEdit').onclick(); toast('Notes saved ✓ (⤓ exports them)'); };
-$('#edPrev').onclick = () => S?.edit && edSelect((S.sel ?? 1) - 1);
-$('#edNext').onclick = () => S?.edit && edSelect((S.sel ?? -1) + 1);
+// in "select many": › adds the next note after the selection, ‹ drops the last one
+$('#edPrev').onclick = () => {
+  if (!S?.edit) return;
+  const many = selected();
+  if (S.multiMode && many.length > 1) { S.multi.delete(many[many.length - 1]); edShow(); return; }
+  edSelect((S.sel ?? 1) - 1);
+};
+$('#edNext').onclick = () => {
+  if (!S?.edit) return;
+  const many = selected();
+  if (S.multiMode && many.length) {
+    const nx = S.notes[S.notes.indexOf(many[many.length - 1]) + 1];
+    if (nx) { S.multi.add(nx); beep(nx.p); if (nx.t > songTime() + 4) seek(nx.t - 3); edShow(); }
+    return;
+  }
+  edSelect((S.sel ?? -1) + 1);
+};
 $('#edUp').onclick = () => edApply(n => { n.p += 1; beep(n.p); });
 $('#edDown').onclick = () => edApply(n => { n.p -= 1; beep(n.p); });
 // octave shift (user, 2026-11-24: "I need better octave control... The "Hear Notes" option throws
@@ -670,7 +748,12 @@ $('#edLeft').onclick =() => edApply(n => { n.t = +Math.max(0, n.t - 0.05).toFixe
 $('#edRight').onclick = () => edApply(n => { n.t = +(n.t + 0.05).toFixed(3); });
 $('#edMine').onclick = () => {
   if (S?.live == null) { toast('Sing the note (music paused), then tap 🎤 again'); return; }
-  edApply(n => { n.p = Math.round(placePitch(S.live, n.p)); beep(n.p); });
+  // several notes: the first goes to your pitch, the rest move by the same step (the tune's shape stays)
+  const first = selected()[0];
+  if (!first) { toast('Tap a note first'); return; }
+  const step = Math.round(placePitch(S.live, first.p)) - first.p;
+  edApply(n => { n.p += step; S.lo = Math.min(S.lo, n.p - 2); S.hi = Math.max(S.hi, n.p + 2); });
+  beep(first.p);
 };
 $('#edShort').onclick = () => edApply(n => { n.d = +Math.max(0.1, n.d - 0.05).toFixed(3); });
 $('#edLong').onclick = () => edApply(n => { n.d = +(n.d + 0.05).toFixed(3); });
@@ -680,16 +763,20 @@ $('#edAdd').onclick = () => {
   const base = near?.p ?? Math.round((S.lo + S.hi) / 2);
   const p = S.live != null ? Math.round(placePitch(S.live, base)) : base;
   const n = { t, d: 0.5, p };
+  pushUndo(); S.multi = new Set();
   S.notes.push(n); edChanged();
   S.sel = S.notes.indexOf(n); beep(p); edShow();
   toast(`Added ${noteName(p)} at the white line`);
 };
 $('#edDel').onclick = () => {
-  const n = S?.notes[S.sel];
-  if (!n) { toast('Tap a note first'); return; }
-  S.notes.splice(S.sel, 1); edChanged();
-  edSelect(Math.min(S.sel, S.notes.length - 1));
-  toast('Note deleted');
+  const list = selected();
+  if (!list.length) { toast('Tap a note first'); return; }
+  pushUndo();
+  const at = S.notes.indexOf(list[0]);
+  for (const n of list) S.notes.splice(S.notes.indexOf(n), 1);
+  S.multi = new Set(); edChanged();
+  edSelect(Math.min(at, S.notes.length - 1));
+  toast(list.length > 1 ? `${list.length} notes deleted (↶ undo brings them back)` : 'Note deleted');
 };
 cv.addEventListener('click', e => {
   if (!S?.edit || !S.geo) return;
@@ -702,7 +789,13 @@ cv.addEventListener('click', e => {
     const d = Math.abs(py - y(n.p));
     if (d < bd) { bd = d; best = i; }
   });
-  if (best >= 0 && bd < Math.max(rowH * 2, 30 * dpr)) edSelect(best);
+  if (best < 0 || bd >= Math.max(rowH * 2, 30 * dpr)) return;
+  const n = S.notes[best];
+  if (e.shiftKey && S.notes[S.sel]) { // PC: everything between the first pick and this one
+    const a = Math.min(S.sel, best), b = Math.max(S.sel, best);
+    S.multi = new Set(S.notes.slice(a, b + 1)); S.sel = a; beep(n.p); edShow();
+  } else if (S.multiMode || e.ctrlKey || e.metaKey) toggleMulti(n);
+  else edSelect(best);
 });
 
 // ---------- main loop ----------
@@ -960,10 +1053,13 @@ function draw(t, ts) {
     g.fillText(noteName(Math.round(fm)), nowX + 12 * dpr, py);
   }
   // selected note (edit mode)
-  if (S.edit && S.sel != null && S.notes[S.sel]) {
-    const n = S.notes[S.sel], bh = Math.max(6 * dpr, rowH * 0.75);
+  if (S.edit) {
+    const bh = Math.max(6 * dpr, rowH * 0.75);
     g.strokeStyle = '#fff'; g.lineWidth = 2 * dpr;
-    g.strokeRect(x(n.t) - 2 * dpr, y(n.p) - bh / 2 - 2 * dpr, Math.max(2, n.d * pps) + 2 * dpr, bh + 4 * dpr);
+    for (const n of selected()) {
+      if (n.t > t1 || n.t + n.d < t0) continue;
+      g.strokeRect(x(n.t) - 2 * dpr, y(n.p) - bh / 2 - 2 * dpr, Math.max(2, n.d * pps) + 2 * dpr, bh + 4 * dpr);
+    }
   }
   S.geo = { t, pps, nowX, y, rowH, dpr };
   // judgement pops
@@ -1485,7 +1581,7 @@ function releaseWake() { wake?.release().catch(() => {}); wake = null; }
 
 // ---------- boot ----------
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
-  navigator.serviceWorker.register('sw.js?v=202611241410', { updateViaCache: 'none' });
+  navigator.serviceWorker.register('sw.js?v=202611241419', { updateViaCache: 'none' });
   // new version installed -> reload once, but never in the middle of a song
   const hadController = !!navigator.serviceWorker.controller;
   navigator.serviceWorker.addEventListener('controllerchange', () => {

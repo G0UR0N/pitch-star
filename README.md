@@ -46,7 +46,12 @@ Tools live in `%USERPROFILE%\PitchScoreGameTools` (Python env, ffmpeg, uv). Not 
 - **✎ Edit notes** (full song): the slider on top of the edit panel drags the white line (where the live pitch dot sits) through the song, to 0.1 s (user, 2026-11-23: "slider control of where my live pitch line sits in the timeline"). Tap a note to pick it (it plays its tone), or step with ‹ ›. Then:
   - ▲ ▼ change it by a semitone; ◀ ▶ move it by 0.05 s.
   - ⇑ oct / ⇓ oct move it a whole octave (user, 2026-11-24: "I need better octave control... The "Hear Notes" option throws notes in the wrong octave lots ... Maybe give up/down arrows for octave shifting"). Scoring ignores octaves, so this changes only what Hear notes plays and where the note is drawn. The view always fits every note.
-  - Your pitch is drawn where it really is (user, 2026-11-24: "the pitch markers are positionally correct for the notes the represent. I don't want to go lower and see my pitch marker jump to the top of the screen"). This applies to the live dot, the trail and the edit-mode trace, whenever your voice is inside the song's whole range (lowest note −4 to highest note +4). Only a voice outside that range, such as a child singing a man's part, is moved by octaves next to the target. 🎤 my pitch and ＋ add place the note where the dot is.
+  - Your pitch is always drawn where it really is, never moved by octaves (user, 2026-11-24: "I don't want to go lower and see my pitch marker jump to the top of the screen" / "there should be no out of range voices, thus no shifted octave views. Make the highest and lowest notes of the song determine the view").
+    - The view runs from the song's lowest note to its highest, with 2 semitones of margin.
+    - A voice outside that range sits at the top or bottom edge with ⇡ / ⇣.
+    - 🎤 my pitch and ＋ add use your true pitch.
+    - Scoring still ignores octaves.
+    - **OPEN** (user, same day): "if certain song ranges make the window too zoomed out, we will address folding octave options then".
   - ⇤ shorter / longer ⇥ change its length by 0.05 s.
   - 🎤 my pitch sets it to the note you're singing.
   - ＋ add puts a new 0.5 s note at the white line (at your sung pitch if you're singing, otherwise the nearby note's pitch).

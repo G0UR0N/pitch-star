@@ -26,6 +26,7 @@ Tools live in `%USERPROFILE%\PitchScoreGameTools` (Python env, ffmpeg, uv). Not 
 ## Play
 - Open the game, tap **Add songs**, pick `.song` files.
 - Use headphones. Set **Mic delay fix** in ⚙️ if scoring feels late.
+- **▶ Start** plays at once; the 3-2-1 count-in was removed (user, 2026-11-23: "you can kill the 3 second countdown, no longer has value").
 - **Guide voice** = original singer volume. **Hear notes** = plays the target melody as tones (also a quick way to check the melody extraction is right).
 - After a song: **Practice weak sections** loops each section until it scores the pass target twice.
 

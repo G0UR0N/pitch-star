@@ -1,8 +1,8 @@
 // ?v= stamps are rewritten by publish.ps1 so every publish loads fresh files past GitHub's CDN cache
-import { readZip, writeZip } from './zip.js?v=202611232333';
-import * as db from './db.js?v=202611232333';
-import { detectPitch } from './pitch.js?v=202611232333';
-import { framesToNotes, placeOctave, toPhrases, noteRange } from './melody.js?v=202611232333';
+import { readZip, writeZip } from './zip.js?v=202611232339';
+import * as db from './db.js?v=202611232339';
+import { detectPitch } from './pitch.js?v=202611232339';
+import { framesToNotes, placeOctave, toPhrases, noteRange } from './melody.js?v=202611232339';
 
 const $ = s => document.querySelector(s);
 const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
@@ -437,8 +437,7 @@ async function play() {
   await ensureAudio();
   ov.hidden = false; ov.textContent = 'Loading…';
   await Promise.all([whenReady(S.backing), whenReady(S.vocals)]);
-  // count-in also gives Bluetooth / mic audio routing time to settle
-  for (const n of [3, 2, 1]) { if (!S) return; ov.textContent = n; await new Promise(r => setTimeout(r, 700)); }
+  // no count-in (user, 2026-11-23: "you can kill the 3 second countdown, no longer has value")
   if (!S) return;
   ov.hidden = true; btn.disabled = false; S.starting = false;
   S.vocals.currentTime = S.backing.currentTime;
@@ -1264,7 +1263,7 @@ function releaseWake() { wake?.release().catch(() => {}); wake = null; }
 
 // ---------- boot ----------
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
-  navigator.serviceWorker.register('sw.js?v=202611232333', { updateViaCache: 'none' });
+  navigator.serviceWorker.register('sw.js?v=202611232339', { updateViaCache: 'none' });
   // new version installed -> reload once, but never in the middle of a song
   const hadController = !!navigator.serviceWorker.controller;
   navigator.serviceWorker.addEventListener('controllerchange', () => {

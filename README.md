@@ -42,9 +42,14 @@ Tools live in `%USERPROFILE%\PitchScoreGameTools` (Python env, ffmpeg, uv). Not 
 ## Skip and fix notes on the play screen (user, 2026-11-23)
 - **⏪ 10s / ⏩ 10s** jump back or forward (within the trimmed song, or the section in practice). Going back makes those notes count again. Notes skipped past are grey and don't count against the score.
 - **While paused, the pink pitch dot still shows** what you sing, with its note name, on the white line. Nothing is scored unless the music is playing (user: "only allow scoring to work if music is playing").
-- **Your sung trace stays for editing** (user, 2026-11-23: "If I made a live pitch trace while singing in play mode, I would like that trace to remain when in edit mode"). While a song plays, everything you sing is recorded (in 20 ms steps). In ✎ Edit notes the whole trace is drawn in pink behind the targets, folded to the octave of the nearest note. Singing a stretch again replaces the old trace there (user: "if I re-record myself singing over an existing pitch trace, go ahead and replace it"). It lasts while the app is open, including Sing again and reopening the song, but not after the app is closed.
+- **Your sung trace stays for editing** (user, 2026-11-23: "If I made a live pitch trace while singing in play mode, I would like that trace to remain when in edit mode"). While a song plays, everything you sing is recorded (in 20 ms steps). In ✎ Edit notes the whole trace is drawn in pink behind the targets, at its true pitch. Singing a stretch again replaces the old trace there (user: "if I re-record myself singing over an existing pitch trace, go ahead and replace it"). It lasts while the app is open, including Sing again and reopening the song, but not after the app is closed.
 - **✎ Edit notes** (full song): the slider on top of the edit panel drags the white line (where the live pitch dot sits) through the song, to 0.1 s (user, 2026-11-23: "slider control of where my live pitch line sits in the timeline"). Tap a note to pick it (it plays its tone), or step with ‹ ›. Then:
-  - ▲ ▼ change it by a semitone; ◀ ▶ move it by 0.05 s.
+  - **Drag it** (user, 2026-11-24: "let me grab either edge of the marker to shrink/expand from that end as I need ... grab near the middle of the marker and move it around with my mouse"):
+    - Drag the middle to move it in time and pitch. A picked group moves together.
+    - Drag either end (about 10 px) to stretch or shrink from that end; the other end stays.
+    - On the PC the cursor shows what you'll grab (↔ at the ends, ✋ in the middle).
+    - A tap without moving only picks the note. Each drag is one undo step.
+    - The ▲ ▼ ◀ ▶ and shorter/longer buttons are gone. On the PC the arrow keys still nudge the picked notes: ↑ ↓ a semitone, ← → 0.05 s.
   - ⇑ oct / ⇓ oct move it a whole octave (user, 2026-11-24: "I need better octave control... The "Hear Notes" option throws notes in the wrong octave lots ... Maybe give up/down arrows for octave shifting"). Scoring ignores octaves, so this changes only what Hear notes plays and where the note is drawn. The view always fits every note.
   - Your pitch is always drawn where it really is, never moved by octaves (user, 2026-11-24: "I don't want to go lower and see my pitch marker jump to the top of the screen" / "there should be no out of range voices, thus no shifted octave views. Make the highest and lowest notes of the song determine the view").
     - The view runs from the song's lowest note to its highest, with 2 semitones of margin.
@@ -52,7 +57,6 @@ Tools live in `%USERPROFILE%\PitchScoreGameTools` (Python env, ffmpeg, uv). Not 
     - 🎤 my pitch and ＋ add use your true pitch.
     - Scoring still ignores octaves.
     - **OPEN** (user, same day): "if certain song ranges make the window too zoomed out, we will address folding octave options then".
-  - ⇤ shorter / longer ⇥ change its length by 0.05 s.
   - 🎤 my pitch sets it to the note you're singing.
   - ＋ add, then tap or click anywhere on the notes view: a 0.5 s note lands with its left end where you tapped, at that row's pitch (user, 2026-11-24: "when I click add, let me pick where it lands ... with the left portion landing where the mouse clicked"). On the PC a faint preview with its note name follows the mouse. Tap ＋ add again, or press Esc, to cancel. ↶ undo removes it.
   - 🗑 deletes it.
@@ -60,7 +64,7 @@ Tools live in `%USERPROFILE%\PitchScoreGameTools` (Python env, ffmpeg, uv). Not 
     - **☐ select many**: each tap adds or removes a note. In that mode › adds the next note and ‹ drops the last one.
     - **▭ all in view** picks every note on screen.
     - On the PC: Ctrl-click adds or removes a note, and Shift-click picks everything between.
-    - Every edit button then works on all picked notes: ▲ ▼, ⇑⇓ oct, ◀ ▶, shorter/longer, 🗑 and use 🔔 pitch (each note takes the check singer's note under it).
+    - Every edit then works on all picked notes: dragging the middle of one of them, the arrow keys, ⇑⇓ oct, 🗑 and use 🔔 pitch (each note takes the check singer's note under it). Dragging an end changes only that note.
     - 🎤 my pitch puts the first note on your pitch and moves the rest by the same step, so the tune keeps its shape.
   - **↶ undo** takes back the last change (up to 50, while the song is open). **↷ redo** puts it back; a new change clears the redo list.
   - Keyboard (user, 2026-11-24: "edit needs ctrl+z and ctrl+y support"): **Ctrl+Z** undoes, and **Ctrl+Y** or **Ctrl+Shift+Z** redoes (Cmd on a Mac). They work in edit mode only, not while typing in a text box.

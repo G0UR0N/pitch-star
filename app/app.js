@@ -1,8 +1,8 @@
 // ?v= stamps are rewritten by publish.ps1 so every publish loads fresh files past GitHub's CDN cache
-import { readZip, writeZip } from './zip.js?v=202611241547';
-import * as db from './db.js?v=202611241547';
-import { detectPitch } from './pitch.js?v=202611241547';
-import { framesToNotes, placeOctave, toPhrases, noteRange } from './melody.js?v=202611241547';
+import { readZip, writeZip } from './zip.js?v=202611241553';
+import * as db from './db.js?v=202611241553';
+import { detectPitch } from './pitch.js?v=202611241553';
+import { framesToNotes, placeOctave, toPhrases, noteRange } from './melody.js?v=202611241553';
 
 const $ = s => document.querySelector(s);
 const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
@@ -839,11 +839,27 @@ cv.addEventListener('pointerdown', e => {
   if (!S?.edit || !S.geo || S.placing || e.button > 0) return;
   const { px, py } = canvasPoint(e), hit = noteAt(px, py);
   if (hit) S.drag = { px, py, m0: S.geo.m(py), hit, n: S.notes[hit.i], id: e.pointerId, started: false };
+  // blank spot: drag to slide the song left / right (user, 2026-11-24: "if I grab on a blank spot in
+  // the view, make it so that I can then shift the view left and right so that I dont have to use
+  // the slider at the bottom"; the slider stays)
+  else S.drag = { px, py, pan: true, t0: songTime(), id: e.pointerId, started: false };
 });
 cv.addEventListener('pointermove', e => {
   if (!S?.edit || !S.geo || S.placing) return;
   const { px, py } = canvasPoint(e), D = S.drag;
-  if (!D) { if (e.pointerType === 'mouse') cv.style.cursor = CURSOR[noteAt(px, py)?.zone] || ''; return; }
+  if (!D) { if (e.pointerType === 'mouse') cv.style.cursor = CURSOR[noteAt(px, py)?.zone] || 'grab'; return; }
+  if (D.pan) {
+    if (!D.started) {
+      if (Math.abs(px - D.px) < 5 * S.geo.dpr) return; // still a tap
+      D.started = true; if (S.running) pause();
+      try { cv.setPointerCapture(D.id); } catch {}
+      cv.style.cursor = 'grabbing';
+    }
+    const now = songTime(), t = Math.min(S.meta.duration - 0.1, Math.max(S.meta.start || 0, D.t0 - (px - D.px) / S.geo.pps));
+    if (t < now) resetStats(lowerBound(t), lowerBound(now) + 1); // sliding back: those notes count again
+    seek(t);
+    return;
+  }
   if (!D.started) {
     if (Math.hypot(px - D.px, py - D.py) < 5 * S.geo.dpr) return; // still a tap
     D.started = true;
@@ -869,6 +885,7 @@ function endDrag() {
   S.drag = null;
   if (!D.started) return; // a tap: the click handler picks the note
   S.dragged = true; // swallow the click that follows
+  if (D.pan) { cv.style.cursor = ''; return; }
   for (const o of D.orig) { S.lo = Math.min(S.lo, o.n.p - 2); S.hi = Math.max(S.hi, o.n.p + 2); }
   edChanged(); S.sel = S.notes.indexOf(D.n); edShow();
   cv.style.cursor = '';
@@ -1761,7 +1778,7 @@ function releaseWake() { wake?.release().catch(() => {}); wake = null; }
 
 // ---------- boot ----------
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
-  navigator.serviceWorker.register('sw.js?v=202611241547', { updateViaCache: 'none' });
+  navigator.serviceWorker.register('sw.js?v=202611241553', { updateViaCache: 'none' });
   // new version installed -> reload once, but never in the middle of a song
   const hadController = !!navigator.serviceWorker.controller;
   navigator.serviceWorker.addEventListener('controllerchange', () => {

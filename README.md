@@ -99,7 +99,7 @@ Start trim: user, 2026-11-23: "I would like the option to trim off slow starts f
 - Known gap: belted or unclear singing isn't recognised. Waiting on a human answer (2026-11-23): Two Front Teeth (match 92%, coverage 94%; 1 part, 1:13.6–1:17.1).
 - Where Are You Christmas: only Faith Hill's original version is kept (user, 2026-11-23: "remove the other attempts at this song so that our library only holds this copy"). The piano and Taylor Momsen packs went to the Recycle Bin. Faith Hill: F major (matches the backing music; same key as the old piano version), match 100%, coverage 100% (19.8 s wordless), 127 melisma notes folded, 216 left.
 - Copies checked before the 90% gate (no `coverage` in `lyricsCheck`) are also treated as old by the app and need re-adding.
-- Karaoke line under the notes: words light up with the melody; next line shown dim. **Lyrics** checkbox on the play screen turns them on/off.
+- Karaoke lines under the notes: words light up with the melody; the next two lines are shown dim, in the same style (user, 2026-11-23: "have lyrics que up at least 3 lines, making the 3rd line the same format as the 2nd"). **Lyrics** checkbox on the play screen turns them on/off.
 - If the timing is off: 📝 → **Save + tap to sync**, then tap (or Space) as each line starts. 📝 → **Find** picks a different version.
 
 ## Dev

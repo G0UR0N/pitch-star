@@ -1,8 +1,8 @@
 // ?v= stamps are rewritten by publish.ps1 so every publish loads fresh files past GitHub's CDN cache
-import { readZip, writeZip } from './zip.js?v=202611232343';
-import * as db from './db.js?v=202611232343';
-import { detectPitch } from './pitch.js?v=202611232343';
-import { framesToNotes, placeOctave, toPhrases, noteRange } from './melody.js?v=202611232343';
+import { readZip, writeZip } from './zip.js?v=202611232344';
+import * as db from './db.js?v=202611232344';
+import { detectPitch } from './pitch.js?v=202611232344';
+import { framesToNotes, placeOctave, toPhrases, noteRange } from './melody.js?v=202611232344';
 
 const $ = s => document.querySelector(s);
 const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
@@ -12,7 +12,7 @@ const TOL = { easy: 100, normal: 60, hard: 40 };
 const params = new URLSearchParams(location.search);
 const SIM = params.has('sim'); // dev: fake singer that follows the melody
 if (SIM) window.__S = () => S; // dev inspection
-if (SIM) setTimeout(() => { window.__score = { scoreFrame, noteScore, resetStats }; }); // dev: scoring tests
+if (SIM) setTimeout(() => { window.__score = { scoreFrame, noteScore, resetStats, lyricsTick }; }); // dev: scoring tests
 
 // ---------- settings ----------
 const settings = (() => {
@@ -1157,9 +1157,13 @@ function lyricsTick(ts) {
     cur.classList.toggle('spoken', !!S.lyr[i]?.spoken);
     if (i >= 0 && S.lyr[i].who) cur.append(whoTag(S.lyr[i]));
     if (i >= 0) S.lyr[i].words.forEach((w, k) => { const sp = document.createElement('span'); sp.className = 'w'; sp.textContent = w + ' '; cur.append(sp); });
-    const nx = $('#lyNext'), n = S.lyr[i + 1]; nx.innerHTML = '';
-    if (n?.who && n.who !== S.lyr[i]?.who) nx.append(whoTag(n));
-    nx.append(n?.words.join(' ') || '');
+    // the next two lines, same style (user, 2026-11-23: "have lyrics que up at least 3 lines,
+    // making the 3rd line the same format as the 2nd")
+    for (const [id, k] of [['#lyNext', 1], ['#lyNext2', 2]]) {
+      const nx = $(id), n = S.lyr[i + k], prev = S.lyr[i + k - 1]; nx.innerHTML = '';
+      if (n?.who && n.who !== prev?.who) nx.append(whoTag(n));
+      nx.append(n?.words.join(' ') || '');
+    }
   }
   if (i >= 0) {
     const spans = $('#lyCur').children, wt = S.lyr[i].wt;
@@ -1274,7 +1278,7 @@ function releaseWake() { wake?.release().catch(() => {}); wake = null; }
 
 // ---------- boot ----------
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
-  navigator.serviceWorker.register('sw.js?v=202611232343', { updateViaCache: 'none' });
+  navigator.serviceWorker.register('sw.js?v=202611232344', { updateViaCache: 'none' });
   // new version installed -> reload once, but never in the middle of a song
   const hadController = !!navigator.serviceWorker.controller;
   navigator.serviceWorker.addEventListener('controllerchange', () => {

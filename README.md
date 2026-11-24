@@ -62,7 +62,8 @@ Tools live in `%USERPROFILE%\PitchScoreGameTools` (Python env, ffmpeg, uv). Not 
     - On the PC: Ctrl-click adds or removes a note, and Shift-click picks everything between.
     - Every edit button then works on all picked notes: ▲ ▼, ⇑⇓ oct, ◀ ▶, shorter/longer, 🗑 and use 🔔 pitch (each note takes the check singer's note under it).
     - 🎤 my pitch puts the first note on your pitch and moves the rest by the same step, so the tune keeps its shape.
-  - **↶ undo** takes back the last change (up to 50, while the song is open).
+  - **↶ undo** takes back the last change (up to 50, while the song is open). **↷ redo** puts it back; a new change clears the redo list.
+  - Keyboard (user, 2026-11-24: "edit needs ctrl+z and ctrl+y support"): **Ctrl+Z** undoes, and **Ctrl+Y** or **Ctrl+Shift+Z** redoes (Cmd on a Mac). They work in edit mode only, not while typing in a text box.
   - Every change is saved on the phone at once (the card shows "✎ own melody"). ⤓ exports the pack to keep it in Drive.
 
 ## Check singer: a second opinion on the targets (user, 2026-11-24: "make a singer tool that sings without melisma along with the song as it understands it without looking at the pitch markers ... as a means of validating the pitch markers as well placed or not")

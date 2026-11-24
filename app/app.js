@@ -1,8 +1,8 @@
 // ?v= stamps are rewritten by publish.ps1 so every publish loads fresh files past GitHub's CDN cache
-import { readZip, writeZip } from './zip.js?v=202611241526';
-import * as db from './db.js?v=202611241526';
-import { detectPitch } from './pitch.js?v=202611241526';
-import { framesToNotes, placeOctave, toPhrases, noteRange } from './melody.js?v=202611241526';
+import { readZip, writeZip } from './zip.js?v=202611241529';
+import * as db from './db.js?v=202611241529';
+import { detectPitch } from './pitch.js?v=202611241529';
+import { framesToNotes, placeOctave, toPhrases, noteRange } from './melody.js?v=202611241529';
 
 const $ = s => document.querySelector(s);
 const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
@@ -13,6 +13,7 @@ const params = new URLSearchParams(location.search);
 const SIM = params.has('sim'); // dev: fake singer that follows the melody
 if (SIM) window.__S = () => S; // dev inspection
 if (SIM) setTimeout(() => { window.__score = { scoreFrame, noteScore, resetStats, lyricsTick, traceWrite, draw, simVoice }; }); // dev: scoring tests
+if (SIM) setTimeout(() => { window.__drive = { set: d => { driveDir = d; }, check: checkDrive, exportSong }; }); // dev: Drive-match tests
 
 // ---------- settings ----------
 const settings = (() => {
@@ -1322,15 +1323,70 @@ async function trimSong(id) {
 // save edits yellow flag doesn't give me google drive as an option" / "I've been using the export
 // arrow instead"). The exported file says it holds the edits (editsMerged), so another device
 // re-adding it replaces its copy without asking, and the ☁️ flag clears here.
+// ---------- is this device's copy the same as the Drive copy? (user, 2026-11-24: "or better yet make
+// it go away if my loaded version matches the google drive folder version"). A web page can't see
+// Drive by itself; on the PC, Chrome/Edge can be given read access to G:\My Drive\PitchStar\Songs
+// once (🔗 Link Drive folder). Then the ☁️ flag only shows while a song's notes, trim or lyrics
+// differ from <id>.song there. Phones can't link a folder: there ⤓ clears the flag instead. ----------
+let driveDir = null;
+const sameSong = m => JSON.stringify([m.notes, m.start || 0, m.duration, (m.lyrics || []).map(l => [l.text, l.t])]);
+async function driveAccess(ask) {
+  if (!driveDir) return false;
+  try {
+    if ((await driveDir.queryPermission({ mode: 'read' })) === 'granted') return true;
+    return ask && (await driveDir.requestPermission({ mode: 'read' })) === 'granted';
+  } catch { return false; }
+}
+async function checkDrive(ask = false) {
+  const ok = await driveAccess(ask);
+  showDriveBtn(ok);
+  if (!ok) return;
+  let cleared = 0;
+  for (const s of await db.allSongs()) {
+    if (!unsavedEdits(s.meta)) continue;
+    try {
+      const f = await (await driveDir.getFileHandle(`${s.id}.song`)).getFile();
+      const pack = JSON.parse(new TextDecoder().decode((await readZip(await f.arrayBuffer()))['song.json']));
+      if (sameSong(pack) !== sameSong(s.meta)) continue;
+      s.meta.editsSaved = Date.now(); s.meta.editsMerged = s.meta.editedAt;
+      await db.putSong(s); cleared++;
+    } catch {} // not in the folder (yet)
+  }
+  if (cleared) renderLibrary();
+}
+function showDriveBtn(ok) {
+  const b = $('#btnLinkDrive');
+  b.hidden = !window.showDirectoryPicker;
+  b.textContent = !driveDir ? '🔗 Link Drive folder' : ok ? '🔗 Drive linked ✓' : '🔄 Check Drive';
+}
+$('#btnLinkDrive').onclick = async () => {
+  try {
+    if (!driveDir || (await driveAccess(true) && confirm('Drive folder is linked. Pick a different folder?'))) {
+      driveDir = await showDirectoryPicker({ id: 'pitchstar-songs', mode: 'read' });
+      await db.putKV('driveDir', driveDir);
+      toast(`Linked "${driveDir.name}". Songs that match their Drive copy lose the ☁️ flag.`, 4000);
+    }
+  } catch (e) { if (e.name !== 'AbortError') toast(`Couldn't link: ${e.message}`, 4000); }
+  checkDrive(true);
+};
+(async () => {
+  try { driveDir = (await db.getKV('driveDir')) || null; } catch {}
+  checkDrive();
+})();
+addEventListener('focus', () => checkDrive()); // back from saving in another window
+
 async function exportSong(id) {
   const s = await db.getSong(id);
   const u8 = async b => new Uint8Array(await b.arrayBuffer());
   const meta = s.meta.editedAt ? { ...s.meta, editsMerged: s.meta.editedAt } : s.meta;
-  const done = async () => {
-    if (!s.meta.editedAt) return;
+  // any use of ⤓ clears the ☁️ flag, saved, downloaded or cancelled (user, 2026-11-24: "make the
+  // save edits flag automatically go away once I interact with the download arrow button").
+  // With the Drive folder linked, the flag follows the real match instead (checkDrive).
+  const linked = await driveAccess(false);
+  if (s.meta.editedAt && !linked) {
     s.meta.editsSaved = Date.now(); s.meta.editsMerged = s.meta.editedAt;
-    await db.putSong(s); renderLibrary();
-  };
+    await db.putSong({ ...s, meta: { ...s.meta } }); renderLibrary();
+  }
   const blob = writeZip({
     'song.json': new TextEncoder().encode(JSON.stringify(meta)),
     'backing.mp3': await u8(s.backing),
@@ -1339,15 +1395,15 @@ async function exportSong(id) {
   const name = `${id}.song`;
   if (window.showSaveFilePicker) { // desktop Chrome/Edge: save straight into the Drive folder
     try {
-      const h = await showSaveFilePicker({ suggestedName: name, types: [{ description: 'Pitch Star song', accept: { 'application/zip': ['.song'] } }] });
+      const h = await showSaveFilePicker({ suggestedName: name, ...(linked ? { startIn: driveDir } : {}), types: [{ description: 'Pitch Star song', accept: { 'application/zip': ['.song'] } }] });
       const w = await h.createWritable(); await w.write(blob); await w.close();
-      await done(); toast('Exported ✓'); return;
+      toast('Exported ✓'); checkDrive(); return;
     } catch (e) { if (e.name === 'AbortError') return; }
   }
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob); a.download = name; a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 10000);
-  toast('Exported to Downloads ✓'); // a phone download isn't in Drive yet: the ☁️ flag stays
+  toast('Exported to Downloads ✓');
 }
 
 // ---------- lyrics: auto-found online (LRCLIB), editable, tap-to-sync, karaoke display ----------
@@ -1605,7 +1661,7 @@ function releaseWake() { wake?.release().catch(() => {}); wake = null; }
 
 // ---------- boot ----------
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
-  navigator.serviceWorker.register('sw.js?v=202611241526', { updateViaCache: 'none' });
+  navigator.serviceWorker.register('sw.js?v=202611241529', { updateViaCache: 'none' });
   // new version installed -> reload once, but never in the middle of a song
   const hadController = !!navigator.serviceWorker.controller;
   navigator.serviceWorker.addEventListener('controllerchange', () => {

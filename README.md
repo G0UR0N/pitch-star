@@ -49,6 +49,7 @@ Tools live in `%USERPROFILE%\PitchScoreGameTools` (Python env, ffmpeg, uv). Not 
     - Drag either end (about 10 px) to stretch or shrink from that end; the other end stays.
     - On the PC the cursor shows what you'll grab (↔ at the ends, ✋ in the middle).
     - A tap without moving only picks the note. Each drag is one undo step.
+    - **Drag an empty spot** left or right to slide through the song, like the slider (user, 2026-11-24: "if I grab on a blank spot in the view, make it so that I can then shift the view left and right so that I dont have to use the slider at the bottom (slider can stay as backup option too)"). Going back makes those notes count again.
     - The ▲ ▼ ◀ ▶ and shorter/longer buttons are gone. On the PC the arrow keys still nudge the picked notes: ↑ ↓ a semitone, ← → 0.05 s.
   - ⇑ oct / ⇓ oct move it a whole octave (user, 2026-11-24: "I need better octave control... The "Hear Notes" option throws notes in the wrong octave lots ... Maybe give up/down arrows for octave shifting"). Scoring ignores octaves, so this changes only what Hear notes plays and where the note is drawn. The view always fits every note.
   - Your pitch is always drawn where it really is, never moved by octaves (user, 2026-11-24: "I don't want to go lower and see my pitch marker jump to the top of the screen" / "there should be no out of range voices, thus no shifted octave views. Make the highest and lowest notes of the song determine the view").

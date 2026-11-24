@@ -1,8 +1,8 @@
 // ?v= stamps are rewritten by publish.ps1 so every publish loads fresh files past GitHub's CDN cache
-import { readZip, writeZip } from './zip.js?v=202611241553';
-import * as db from './db.js?v=202611241553';
-import { detectPitch } from './pitch.js?v=202611241553';
-import { framesToNotes, placeOctave, toPhrases, noteRange } from './melody.js?v=202611241553';
+import { readZip, writeZip } from './zip.js?v=202611241556';
+import * as db from './db.js?v=202611241556';
+import { detectPitch } from './pitch.js?v=202611241556';
+import { framesToNotes, placeOctave, toPhrases, noteRange } from './melody.js?v=202611241556';
 
 const $ = s => document.querySelector(s);
 const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
@@ -828,26 +828,37 @@ function noteAt(px, py) {
   S.notes.forEach((n, i) => {
     const x0 = nowX + (n.t - t) * pps, x1 = x0 + n.d * pps, inner = Math.min(edge, (x1 - x0) / 3);
     if (px < x0 - edge || px > x1 + edge) return;
-    const d = Math.abs(py - y(n.p));
-    if (d > Math.max(bh, 16 * dpr) || d >= bd) return;
+    const dy = Math.abs(py - y(n.p));
+    if (dy > Math.max(bh, 16 * dpr)) return;
+    // a note under the pointer beats a touching neighbour's outer grab zone
+    const d = dy + Math.max(0, x0 - px, px - x1) * 4;
+    if (d >= bd) return;
     bd = d; best = { i, zone: px < x0 + inner ? 'left' : px > x1 - inner ? 'right' : 'move' };
   });
   return best;
 }
 const CURSOR = { left: 'ew-resize', right: 'ew-resize', move: 'grab' };
+// Slide the song left / right by dragging (user, 2026-11-24: "if I grab on a blank spot in the view,
+// make it so that I can then shift the view left and right so that I dont have to use the slider";
+// then "sorry Right Click is pan..." / "left click is still normal for other engagements" / "will help
+// prevent confusion if I end up grabbing too near a marker"). Mouse: right-button drag pans from
+// anywhere, even over a note; left button only picks and drags notes. Touch has no right button: a
+// finger on an empty spot pans. The slider stays.
+cv.addEventListener('contextmenu', e => { if (S?.edit) e.preventDefault(); });
 cv.addEventListener('pointerdown', e => {
-  if (!S?.edit || !S.geo || S.placing || e.button > 0) return;
-  const { px, py } = canvasPoint(e), hit = noteAt(px, py);
+  if (!S?.edit || !S.geo || S.placing) return;
+  const { px, py } = canvasPoint(e), mouse = e.pointerType === 'mouse';
+  const pan = { px, py, pan: true, t0: songTime(), id: e.pointerId, started: false };
+  if (mouse && e.button === 2) { S.drag = { ...pan, right: true }; return; }
+  if (e.button > 0) return;
+  const hit = noteAt(px, py);
   if (hit) S.drag = { px, py, m0: S.geo.m(py), hit, n: S.notes[hit.i], id: e.pointerId, started: false };
-  // blank spot: drag to slide the song left / right (user, 2026-11-24: "if I grab on a blank spot in
-  // the view, make it so that I can then shift the view left and right so that I dont have to use
-  // the slider at the bottom"; the slider stays)
-  else S.drag = { px, py, pan: true, t0: songTime(), id: e.pointerId, started: false };
+  else if (!mouse) S.drag = pan;
 });
 cv.addEventListener('pointermove', e => {
   if (!S?.edit || !S.geo || S.placing) return;
   const { px, py } = canvasPoint(e), D = S.drag;
-  if (!D) { if (e.pointerType === 'mouse') cv.style.cursor = CURSOR[noteAt(px, py)?.zone] || 'grab'; return; }
+  if (!D) { if (e.pointerType === 'mouse') cv.style.cursor = CURSOR[noteAt(px, py)?.zone] || ''; return; }
   if (D.pan) {
     if (!D.started) {
       if (Math.abs(px - D.px) < 5 * S.geo.dpr) return; // still a tap
@@ -884,7 +895,7 @@ function endDrag() {
   if (!D) return;
   S.drag = null;
   if (!D.started) return; // a tap: the click handler picks the note
-  S.dragged = true; // swallow the click that follows
+  if (!D.right) S.dragged = true; // swallow the click that follows (a right-button drag makes none)
   if (D.pan) { cv.style.cursor = ''; return; }
   for (const o of D.orig) { S.lo = Math.min(S.lo, o.n.p - 2); S.hi = Math.max(S.hi, o.n.p + 2); }
   edChanged(); S.sel = S.notes.indexOf(D.n); edShow();
@@ -906,12 +917,17 @@ cv.addEventListener('click', e => {
   const { t, pps, nowX, y, rowH, dpr } = S.geo, r = cv.getBoundingClientRect();
   // map the tap to canvas pixels with the real scale on each axis (they differ if the canvas is stretched)
   const px = (e.clientX - r.left) * (cv.width / r.width), py = (e.clientY - r.top) * (cv.height / r.height), tt = t + (px - nowX) / pps;
-  let best = -1, bd = Infinity;
-  S.notes.forEach((n, i) => {
-    if (tt < n.t - 0.15 || tt > n.t + n.d + 0.15) return;
-    const d = Math.abs(py - y(n.p));
-    if (d < bd) { bd = d; best = i; }
-  });
+  // the note under the pointer first (same lookup as dragging); only then the nearest within 0.15 s
+  // (2026-11-24: two touching same-pitch notes: a click inside the second picked the first)
+  let best = noteAt(px, py)?.i ?? -1, bd = 0;
+  if (best < 0) {
+    bd = Infinity;
+    S.notes.forEach((n, i) => {
+      if (tt < n.t - 0.15 || tt > n.t + n.d + 0.15) return;
+      const d = Math.abs(py - y(n.p)) + Math.max(0, n.t - tt, tt - n.t - n.d) * pps; // time gap counts too
+      if (d < bd) { bd = d; best = i; }
+    });
+  }
   if (best < 0 || bd >= Math.max(rowH * 2, 30 * dpr)) return;
   const n = S.notes[best];
   if (e.shiftKey && S.notes[S.sel]) { // PC: everything between the first pick and this one
@@ -1778,7 +1794,7 @@ function releaseWake() { wake?.release().catch(() => {}); wake = null; }
 
 // ---------- boot ----------
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
-  navigator.serviceWorker.register('sw.js?v=202611241553', { updateViaCache: 'none' });
+  navigator.serviceWorker.register('sw.js?v=202611241556', { updateViaCache: 'none' });
   // new version installed -> reload once, but never in the middle of a song
   const hadController = !!navigator.serviceWorker.controller;
   navigator.serviceWorker.addEventListener('controllerchange', () => {

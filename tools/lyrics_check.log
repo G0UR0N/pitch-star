@@ -1,12 +1,21 @@
-lyrics check 2026-11-23 22:56  (fix)
+lyrics check 2026-11-24 01:23  (check only)
 
-== where-are-you-christmas-from-dr-seuss-how-the-grinch-stole-c.song  [vocal]
-   shipped: 0 lines (checked)  ->  verified: 30 lines, {'source': 'heard+published', 'published': 'Where Are You Christmas – Faith Hill', 'agree': 1.0, 'unconfirmed': [], 'lines': 30, 'heard': 139, 'vocalise': [[32.2, 37.0], [237.0, 238.4]], 'slotFilled': 1, 'wordless': 19.8, 'coverage': 1.0}
-   shipped lyrics DIFFER from the verified ones
-        43.32  Where are you, Christmas?
-        48.32  Why can't I find you?
-         52.2  Why have you gone away?
-        60.74  Where is the laughter
-        64.68  You used to bring me?
-        70.26  Why can't I hear music play?
-   FIXED (backup: where-are-you-christmas-from-dr-seuss-how-the-grinch-stole-c.20261123-2257.song)
+== jingle-bells-christmas-song-super-simple-songs.song  [vocal]
+   shipped: 49 lines (checked)  ->  verified: 49 lines, {'source': 'heard+published', 'published': 'Jingle Bells – Michael Bublé & The Puppini Sisters', 'agree': 1.0, 'unconfirmed': ['143.5 And I want her so pen slay'], 'lines': 49, 'heard': 252, 'coverage': 0.994, 'human': 1}
+   shipped lyrics match the verified ones
+         8.85  Dashing through the snow
+        11.45  In a one horse open sleigh
+        14.83  O'er the fields we go
+        16.19  Laughing all the way
+        18.75  Bells on bob tail ring
+        21.03  Making spirits bright
+
+== these-palace-walls-aladdin-jr-lyrics.song  [vocal]
+   shipped: 23 lines (checked)  ->  verified: 23 lines, {'source': 'heard+published', 'published': 'on-screen lyrics (video slides)', 'agree': 1.0, 'unconfirmed': [], 'lines': 23, 'heard': 158, 'coverage': 1.0}
+   shipped lyrics match the verified ones
+         3.36  Princess, the outside world might be overwhelming
+          6.1  for someone like you.
+         7.76  Oh, I think a little excursion would do her some good.
+        11.24  You do?
+         12.2  Sure, a taste of what's beyond these palace walls
+        15.18  could be just what a princess needs.

@@ -1,8 +1,8 @@
 // ?v= stamps are rewritten by publish.ps1 so every publish loads fresh files past GitHub's CDN cache
-import { readZip, writeZip } from './zip.js?v=202611240021';
-import * as db from './db.js?v=202611240021';
-import { detectPitch } from './pitch.js?v=202611240021';
-import { framesToNotes, placeOctave, toPhrases, noteRange } from './melody.js?v=202611240021';
+import { readZip, writeZip } from './zip.js?v=202611240135';
+import * as db from './db.js?v=202611240135';
+import { detectPitch } from './pitch.js?v=202611240135';
+import { framesToNotes, placeOctave, toPhrases, noteRange } from './melody.js?v=202611240135';
 
 const $ = s => document.querySelector(s);
 const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
@@ -70,7 +70,7 @@ async function renderLibrary() {
   const stale = songs.filter(s => s.meta.lyricsCheck?.stale);
   if (stale.length) {
     const b = document.createElement('button'); b.className = 'btn warn wide';
-    b.textContent = `⚠ Lyrics need an update for: ${stale.map(songName).join(', ')}. Tap here and pick ${stale.length > 1 ? 'them' : 'it'} from Drive → PitchStar.`;
+    b.textContent = `⚠ Lyrics need an update for: ${stale.map(songName).join(', ')}. Tap here and pick ${stale.length > 1 ? 'them' : 'it'} from Drive → PitchStar → Songs.`;
     b.onclick = () => $('#importInput').click();
     list.append(b);
   }
@@ -216,10 +216,10 @@ async function saveEdits(id) {
   const name = `${id}.edits.txt`;
   const file = new File([JSON.stringify(ed)], name, { type: 'text/plain' });
   try {
-    if (window.showSaveFilePicker) { // desktop Chrome/Edge: save straight into G:\My Drive\PitchStar
+    if (window.showSaveFilePicker) { // desktop Chrome/Edge: save straight into G:\My Drive\PitchStar\PrepFiles
       const h = await showSaveFilePicker({ suggestedName: name, types: [{ description: 'Pitch Star edits', accept: { 'text/plain': ['.txt'] } }] });
       const w = await h.createWritable(); await w.write(file); await w.close();
-    } else if (navigator.canShare?.({ files: [file] })) { // phone: share sheet -> Drive -> PitchStar
+    } else if (navigator.canShare?.({ files: [file] })) { // phone: share sheet -> Drive -> PitchStar -> PrepFiles
       await navigator.share({ files: [file], title: `${songName(s)} edits` });
     } else {
       const a = document.createElement('a'); a.href = URL.createObjectURL(file); a.download = name; a.click();
@@ -227,7 +227,7 @@ async function saveEdits(id) {
     }
   } catch (e) { if (e.name === 'AbortError') return; toast(`Couldn't save: ${e.message}`, 4000); return; }
   s.meta.editsSaved = Date.now(); await db.putSong(s);
-  toast('Edits saved ✓  Put them in Drive → PitchStar; the PC merges them into the song.', 5000);
+  toast('Edits saved ✓  Put them in Drive → PitchStar → PrepFiles; the PC merges them into the song.', 5000);
   renderLibrary();
 }
 
@@ -1355,7 +1355,7 @@ function releaseWake() { wake?.release().catch(() => {}); wake = null; }
 
 // ---------- boot ----------
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
-  navigator.serviceWorker.register('sw.js?v=202611240021', { updateViaCache: 'none' });
+  navigator.serviceWorker.register('sw.js?v=202611240135', { updateViaCache: 'none' });
   // new version installed -> reload once, but never in the middle of a song
   const hadController = !!navigator.serviceWorker.controller;
   navigator.serviceWorker.addEventListener('controllerchange', () => {

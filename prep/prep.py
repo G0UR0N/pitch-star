@@ -17,7 +17,11 @@ import soundfile as sf
 import torch
 
 ROOT = Path(__file__).resolve().parent.parent
-SONGS_DIR = Path(os.environ.get("PSG_SONGS") or ROOT / "songs")
+DRIVE_DIR = Path(os.environ.get("PSG_SONGS") or ROOT / "songs")  # G:\My Drive\PitchStar
+# user, 2026-11-24: "organize our google folder a bit. Make folder "Songs" and another "PrepFiles""
+# .song packs in Songs\, prep inputs (lyric answers, on-screen lyrics, app edits) in PrepFiles\.
+SONGS_DIR = DRIVE_DIR / "Songs" if (DRIVE_DIR / "Songs").is_dir() else DRIVE_DIR
+PREP_DIR = DRIVE_DIR / "PrepFiles" if (DRIVE_DIR / "PrepFiles").is_dir() else DRIVE_DIR
 TOOLS = Path(os.environ.get("PSG_TOOLS", Path.home() / "PitchScoreGameTools"))
 WORK = TOOLS / "work"
 BIN = TOOLS / "bin"
@@ -713,10 +717,10 @@ def fill_slots(lines, pub, counts, spans, bad, notes, info):
 
 # Human answers for rough parts, kept in the songs folder (Drive; not in the public repo:
 # it holds lyric text): {"<song title>": [{"t": seconds, "text": "the sung line"}]}.
-ANSWERS = SONGS_DIR / "lyrics_answers.json"
+ANSWERS = PREP_DIR / "lyrics_answers.json"
 # Lyrics read off a video's slides (tools/video_frames.py + slide_changes.py), same place:
 # {"<song title>": [{"text": "...", "who": "Jasmine", "spoken": true?}]}
-ONSCREEN = SONGS_DIR / "lyrics_onscreen.json"
+ONSCREEN = PREP_DIR / "lyrics_onscreen.json"
 
 
 def use_answers(title, lines, info, pub, counts, bad, spans, notes):

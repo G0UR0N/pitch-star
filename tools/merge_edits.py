@@ -1,8 +1,8 @@
 """Merge edits saved from the app (☁️ -> <song>.edits.txt in the Drive songs folder) into the
 master .song packs, so every device gets them when it re-adds the song (user, 2026-11-23:
 "pull my edits into the source files so that other devices can pull them in as the master source").
-Usage: merge_edits.py            (all edit files in PSG_SONGS / G:\\My Drive\\PitchStar)
-Each pack is backed up to PitchScoreGameTools\\backup first; merged edit files move to <songs>\\merged.
+Usage: merge_edits.py            (edit files in G:\\My Drive\\PitchStar\\PrepFiles; packs in ...\\Songs)
+Each pack is backed up to PitchScoreGameTools\\backup first; merged edit files move to PrepFiles\\merged.
 Report: tools\\merge_edits.log"""
 import json
 import shutil
@@ -17,7 +17,9 @@ from trim_song import read_pack, trim_pack, write_pack  # noqa: E402
 
 LOG = Path(__file__).with_name("merge_edits.log")
 SONGS = prep.SONGS_DIR
-report = [f"merge edits {time.strftime('%Y-%m-%d %H:%M')}  ({SONGS})"]
+# edits files are saved into PitchStar\PrepFiles (or anywhere in PitchStar, by mistake)
+LOOK = list(dict.fromkeys([prep.PREP_DIR, prep.SONGS_DIR, prep.DRIVE_DIR]))
+report = [f"merge edits {time.strftime('%Y-%m-%d %H:%M')}  (songs: {SONGS})"]
 
 
 def say(s):
@@ -33,7 +35,7 @@ def load(f):
         return None
 
 
-edits = [(f, ed) for f in sorted(SONGS.glob("*.edits*.*")) if f.suffix in (".txt", ".json") and (ed := load(f))]
+edits = [(f, ed) for d in LOOK for f in sorted(d.glob("*.edits*.*")) if f.suffix in (".txt", ".json") and (ed := load(f))]
 if not edits:
     say("no edit files found")
 packs = {p: read_pack(p)[0]["title"] for p in SONGS.glob("*.song")}
@@ -85,7 +87,7 @@ for k, (f, ed) in newest.items():
     say(f"   MERGED (backup: {backup.name})")
     done.add(k)
 # file the edit files away (older copies of a merged song too)
-arch = SONGS / "merged"
+arch = prep.PREP_DIR / "merged"
 for f, ed in edits:
     if (ed.get("song") or ed.get("title")) in done:
         arch.mkdir(exist_ok=True)

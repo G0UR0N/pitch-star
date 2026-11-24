@@ -5,7 +5,11 @@ Karaoke pitch-training game. PC preps songs; game runs in a browser (phone or PC
 ## Add a song (PC, no AI needed)
 1. Double-click `prep\prep.bat`.
 2. Paste a YouTube link (or drag in an audio file) and press Enter. Takes ~1–2 min.
-3. The pack appears in `G:\My Drive\PitchStar\<name>.song` (Google Drive; set by `PSG_SONGS` in `prep.bat`).
+3. The pack appears in `G:\My Drive\PitchStar\Songs\<name>.song` (Google Drive; `PSG_SONGS` in `prep.bat` names the PitchStar folder).
+
+Drive layout (user, 2026-11-24: "organize our google folder a bit. Make folder "Songs" and another "PrepFiles""):
+- `PitchStar\Songs\`: the `.song` packs (the master copies every device adds from).
+- `PitchStar\PrepFiles\`: prep inputs the app never reads: `lyrics_answers.json`, `lyrics_onscreen.json`, edits saved with ☁️, and `merged\` (edits already merged).
 
 Batch: `prep\prep.bat <link1> <link2> ...`
 
@@ -20,8 +24,8 @@ Tools live in `%USERPROFILE%\PitchScoreGameTools` (Python env, ffmpeg, uv). Not 
 ## Phone
 - Game URL: https://g0ur0n.github.io/pitch-star/app/
 - iPhone (Safari): Share → **Add to Home Screen**. Android (Chrome): ⋮ → **Install app**.
-- Songs: `G:\My Drive\PitchStar` syncs through Google Drive. On the phone tap **Add songs** → browse Google Drive → `PitchStar` → pick `.song` files. They're stored in the app and work offline.
-- Keeping songs (2026-11-24, after a device lost its song library): the app asks the browser to keep its storage permanently, at start and after each Add songs. ⚙️ Settings shows the result. Installed apps (Home Screen / Install app) are usually allowed; a plain browser tab may be refused. Drive stays the master copy: re-add from `PitchStar`, and save edits with ☁️. On an iPhone, Safari and the Home Screen app keep separate song libraries.
+- Songs: `G:\My Drive\PitchStar\Songs` syncs through Google Drive. On the phone tap **Add songs** → browse Google Drive → `PitchStar` → `Songs` → pick `.song` files. They're stored in the app and work offline.
+- Keeping songs (2026-11-24, after a device lost its song library): the app asks the browser to keep its storage permanently, at start and after each Add songs. ⚙️ Settings shows the result. Installed apps (Home Screen / Install app) are usually allowed; a plain browser tab may be refused. Drive stays the master copy: re-add from `PitchStar\Songs`, and save edits with ☁️. On an iPhone, Safari and the Home Screen app keep separate song libraries.
 - App updates: after code changes run `publish.ps1` (right-click → Run with PowerShell).
 
 ## Play
@@ -49,8 +53,8 @@ Tools live in `%USERPROFILE%\PitchScoreGameTools` (Python env, ffmpeg, uv). Not 
 
 ## Edits → Drive master (user, 2026-11-23: "pull my edits into the source files so that other devices can pull them in as the master source")
 1. Edit on any device (notes, 🎙️ melody, ✂️ trim, 📝 lyrics, tap-sync). The card then shows **☁️ Save edits to Drive**.
-2. Tap it. On the phone the share sheet opens: pick **Drive → PitchStar**. On the PC a save box opens: pick `G:\My Drive\PitchStar`. It writes `<song>.edits.txt` (small; it holds the notes, trim, name, folder and lyrics).
-3. On the PC run `tools\merge_edits.py` (venv python), or ask Claude. It folds the newest edits file for each song into the master `.song`: notes replaced, trim applied (audio cut, times shifted), name and folder set, lyrics you typed kept. The pack is backed up to `PitchScoreGameTools\backup` first, the edits file moves to `PitchStar\merged`, and the report goes to `tools\merge_edits.log`.
+2. Tap it. On the phone the share sheet opens: pick **Drive → PitchStar → PrepFiles**. On the PC a save box opens: pick `G:\My Drive\PitchStar\PrepFiles`. It writes `<song>.edits.txt` (small; it holds the notes, trim, name, folder and lyrics).
+3. On the PC run `tools\merge_edits.py` (venv python), or ask Claude. It folds the newest edits file for each song into the master `.song`: notes replaced, trim applied (audio cut, times shifted), name and folder set, lyrics you typed kept. The pack is backed up to `PitchScoreGameTools\backup` first, the edits file moves to `PitchStar\PrepFiles\merged`, and the report goes to `tools\merge_edits.log`.
 4. Other devices: **Add songs** → pick the song again. Re-adding keeps nothing from before except name and folder; the master now holds the edits.
 - Safety: if this device has edits the Drive file doesn't have yet, re-adding asks before replacing them.
 - The master is protected. `prep.py` won't rebuild a pack holding your edits unless you pass `--force`, and `lyrics_check --fix` leaves lyrics you typed alone.
@@ -60,7 +64,7 @@ Best on the PC in Chrome/Edge (open the game URL), headphones on.
 1. ⚙️ → pick the **Microphone**, then **Auto-set delay** (say "tick" on each beep). Delay is saved per microphone; the mic picker is also on the play screen.
 2. Song list → 🎙️. ◀ ▶ picks **whole song** or one section. **Start**, sing the tune (any octave; vibrato and slides are ignored).
 3. Pink bars = what was heard. **Listen** plays them as tones over the music. **Keep** / **Retry** / **Discard**.
-4. **⤓ Export** saves the fixed `.song`. On PC, pick `G:\My Drive\PitchStar` (replace the old file). On the phone, remove the old copy and **Add songs** again.
+4. **⤓ Export** saves the fixed `.song`. On PC, pick `G:\My Drive\PitchStar\Songs` (replace the old file). On the phone, remove the old copy and **Add songs** again.
 
 ## Trim a song (slow start and/or end)
 Start trim: user, 2026-11-23: "I would like the option to trim off slow starts from songs as well".
@@ -89,8 +93,8 @@ Start trim: user, 2026-11-23: "I would like the option to trim off slow starts f
 - Old copies: the app keeps its own copy of each song, so fixing a pack in Drive doesn't change what is already added. When the app starts (and when a pack is imported), it removes lyrics that have no check record (2026-11-22, after the old Jingle Bells copy still showed another song's words). Such songs then show no lyrics until re-added, so a yellow banner at the top of the song list names them and opens the file picker when tapped (the card shows the same button, since folders can hide it). Re-adding keeps the name and folder.
 - Check or repair packs: `tools\lyrics_check.py [--fix] [file.song]` (default: every pack in Drive; backups go to `PitchScoreGameTools\backup`; report in `tools\lyrics_check.log`). `tools\show_lyrics.py <pack|folder>` prints them.
 - Why: on 2026-11-22, a title-only match gave Jingle Bells another song's words ("…you filthy animal").
-- **Human help for rough parts** (user, 2026-11-23: "if you need help deciphering rough parts, you can que it up for me to help" / "don't lean on me more than absolutely necessary tho"). When a pack misses the gate, prep logs `ASK a human` only for the fewest rough parts (sung time with no confirmed line, or a heard line no published line confirms) that would lift it over 95%, and only if that's reachable. The answer ("the line at 1:13 is …") is saved with `tools\lyrics_answer.py <file.song> <seconds> "<line>"` into `G:\My Drive\PitchStar\lyrics_answers.json` (lyric text, so it stays out of the repo). Every later prep or check uses it, so a part is never asked twice. Jingle Bells passes this way (2026-11-23: the slow repeat "In a one horse open sleigh" at 2:23.5, heard as "And I want her so pen slay").
-- **Lyrics from the video's own slides, with singer parts** (user, 2026-11-23: "Can you use screen snips from the video to derive the lyrics? There are several parts/singers for this and it would be nice of the lyrics tracked that"). `tools\video_frames.py <url> <folder>` saves one frame per second; `tools\slide_changes.py <folder>` lists each distinct slide. The slides are read by eye (per-line confidence > 90%) into `G:\My Drive\PitchStar\lyrics_onscreen.json`, keyed by video title: `{text, who, spoken}` per line. Prep and `lyrics_check` try them first and verify them against the singing like any published version (same 95% gate). Lines keep `who` and `spoken`; the play screen shows the singer as a coloured tag (one colour per name, grey for All) and spoken lines in italics. First use: These Palace Walls (Aladdin Jr.), 23 lines, match 100%, coverage 100%. The slide's last line "Something waits behind these palace walls" is not in the lead vocal, so it is left out.
+- **Human help for rough parts** (user, 2026-11-23: "if you need help deciphering rough parts, you can que it up for me to help" / "don't lean on me more than absolutely necessary tho"). When a pack misses the gate, prep logs `ASK a human` only for the fewest rough parts (sung time with no confirmed line, or a heard line no published line confirms) that would lift it over 95%, and only if that's reachable. The answer ("the line at 1:13 is …") is saved with `tools\lyrics_answer.py <file.song> <seconds> "<line>"` into `G:\My Drive\PitchStar\PrepFiles\lyrics_answers.json` (lyric text, so it stays out of the repo). Every later prep or check uses it, so a part is never asked twice. Jingle Bells passes this way (2026-11-23: the slow repeat "In a one horse open sleigh" at 2:23.5, heard as "And I want her so pen slay").
+- **Lyrics from the video's own slides, with singer parts** (user, 2026-11-23: "Can you use screen snips from the video to derive the lyrics? There are several parts/singers for this and it would be nice of the lyrics tracked that"). `tools\video_frames.py <url> <folder>` saves one frame per second; `tools\slide_changes.py <folder>` lists each distinct slide. The slides are read by eye (per-line confidence > 90%) into `G:\My Drive\PitchStar\PrepFiles\lyrics_onscreen.json`, keyed by video title: `{text, who, spoken}` per line. Prep and `lyrics_check` try them first and verify them against the singing like any published version (same 95% gate). Lines keep `who` and `spoken`; the play screen shows the singer as a coloured tag (one colour per name, grey for All) and spoken lines in italics. First use: These Palace Walls (Aladdin Jr.), 23 lines, match 100%, coverage 100%. The slide's last line "Something waits behind these palace walls" is not in the lead vocal, so it is left out.
 - JSON files in the songs folder are read with `utf-8-sig`: a file saved by a Windows tool starts with a BOM, and plain `utf-8` silently skipped the on-screen lyrics (2026-11-23).
 - Tried and dropped (2026-11-23): re-listening to unconfirmed lines on their own. It fixed nothing and pushed It's Beginning to Look… below the gate.
 - **The published line order settles parts with no human** (2026-11-23, Faith Hill's Where Are You Christmas):

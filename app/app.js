@@ -1,8 +1,8 @@
 // ?v= stamps are rewritten by publish.ps1 so every publish loads fresh files past GitHub's CDN cache
-import { readZip, writeZip } from './zip.js?v=202611241419';
-import * as db from './db.js?v=202611241419';
-import { detectPitch } from './pitch.js?v=202611241419';
-import { framesToNotes, placeOctave, toPhrases, noteRange } from './melody.js?v=202611241419';
+import { readZip, writeZip } from './zip.js?v=202611241444';
+import * as db from './db.js?v=202611241444';
+import { detectPitch } from './pitch.js?v=202611241444';
+import { framesToNotes, placeOctave, toPhrases, noteRange } from './melody.js?v=202611241444';
 
 const $ = s => document.querySelector(s);
 const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
@@ -1304,11 +1304,21 @@ async function trimSong(id) {
 }
 
 // ---------- export a song pack (e.g. after re-recording the melody) ----------
+// ⤓ exports the whole song with its edits, so it counts as saving them (user, 2026-11-24: "that
+// save edits yellow flag doesn't give me google drive as an option" / "I've been using the export
+// arrow instead"). The exported file says it holds the edits (editsMerged), so another device
+// re-adding it replaces its copy without asking, and the ☁️ flag clears here.
 async function exportSong(id) {
   const s = await db.getSong(id);
   const u8 = async b => new Uint8Array(await b.arrayBuffer());
+  const meta = s.meta.editedAt ? { ...s.meta, editsMerged: s.meta.editedAt } : s.meta;
+  const done = async () => {
+    if (!s.meta.editedAt) return;
+    s.meta.editsSaved = Date.now(); s.meta.editsMerged = s.meta.editedAt;
+    await db.putSong(s); renderLibrary();
+  };
   const blob = writeZip({
-    'song.json': new TextEncoder().encode(JSON.stringify(s.meta)),
+    'song.json': new TextEncoder().encode(JSON.stringify(meta)),
     'backing.mp3': await u8(s.backing),
     'vocals.mp3': await u8(s.vocals),
   });
@@ -1317,13 +1327,13 @@ async function exportSong(id) {
     try {
       const h = await showSaveFilePicker({ suggestedName: name, types: [{ description: 'Pitch Star song', accept: { 'application/zip': ['.song'] } }] });
       const w = await h.createWritable(); await w.write(blob); await w.close();
-      toast('Exported ✓'); return;
+      await done(); toast('Exported ✓'); return;
     } catch (e) { if (e.name === 'AbortError') return; }
   }
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob); a.download = name; a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 10000);
-  toast('Exported to Downloads ✓');
+  toast('Exported to Downloads ✓'); // a phone download isn't in Drive yet: the ☁️ flag stays
 }
 
 // ---------- lyrics: auto-found online (LRCLIB), editable, tap-to-sync, karaoke display ----------
@@ -1581,7 +1591,7 @@ function releaseWake() { wake?.release().catch(() => {}); wake = null; }
 
 // ---------- boot ----------
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
-  navigator.serviceWorker.register('sw.js?v=202611241419', { updateViaCache: 'none' });
+  navigator.serviceWorker.register('sw.js?v=202611241444', { updateViaCache: 'none' });
   // new version installed -> reload once, but never in the middle of a song
   const hadController = !!navigator.serviceWorker.controller;
   navigator.serviceWorker.addEventListener('controllerchange', () => {

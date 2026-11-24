@@ -45,6 +45,7 @@ Tools live in `%USERPROFILE%\PitchScoreGameTools` (Python env, ffmpeg, uv). Not 
 - **Your sung trace stays for editing** (user, 2026-11-23: "If I made a live pitch trace while singing in play mode, I would like that trace to remain when in edit mode"). While a song plays, everything you sing is recorded (in 20 ms steps). In ✎ Edit notes the whole trace is drawn in pink behind the targets, folded to the octave of the nearest note. Singing a stretch again replaces the old trace there (user: "if I re-record myself singing over an existing pitch trace, go ahead and replace it"). It lasts while the app is open, including Sing again and reopening the song, but not after the app is closed.
 - **✎ Edit notes** (full song): the slider on top of the edit panel drags the white line (where the live pitch dot sits) through the song, to 0.1 s (user, 2026-11-23: "slider control of where my live pitch line sits in the timeline"). Tap a note to pick it (it plays its tone), or step with ‹ ›. Then:
   - ▲ ▼ change it by a semitone; ◀ ▶ move it by 0.05 s.
+  - ⇑ oct / ⇓ oct move it a whole octave (user, 2026-11-24: "I need better octave control... The "Hear Notes" option throws notes in the wrong octave lots ... Maybe give up/down arrows for octave shifting"). Scoring ignores octaves, so this changes only what Hear notes plays and where the note is drawn. The view always fits every note.
   - ⇤ shorter / longer ⇥ change its length by 0.05 s.
   - 🎤 my pitch sets it to the note you're singing.
   - ＋ add puts a new 0.5 s note at the white line (at your sung pitch if you're singing, otherwise the nearby note's pitch).
@@ -86,6 +87,18 @@ Tools live in `%USERPROFILE%\PitchScoreGameTools` (Python env, ffmpeg, uv). Not 
   - Using the check singer's notes as targets: it finds more notes but makes too many extras.
   - Lighter smoothing (0.08 s): +0.02, too small to change it for every song, because smoothing is what removes vibrato.
   - Telling speech from singing by pitch steadiness: Faith Hill's ornamented singing looks as unsteady as speech.
+- Whole song repaired (2026-11-24; ground truth updated to all 156 notes):
+  - Today's prep scores 0.71 against it, the old prep 0.58.
+  - Of Claude's 6 pitch fixes after 1:15, you kept 3 (1:24.4, 1:29.9, 1:31.8) and reverted 3 (1:20.0, 1:22.6, 1:31.1). "Both detectors agree" was wrong where both heard a harmony or a passing note.
+  - The final "Something waits…" line (1:43.9–1:50) is melody. Claude had dismissed it as backing singers.
+- What the separated tracks hold (These Palace Walls): the karaoke separator splits by voice type, not by role.
+  - Jasmine is "lead". Isir, Manal, Rajah and the ensemble went to the "backing" track.
+  - Of your 156 notes, 96 are in the lead track, 40 only in the backing track (prep now fills these) and 17 in neither.
+  - Those 17 are harmony spots where you picked the melody out, nearly always the upper voice. The pitch tracker follows the lower, louder one.
+- **OPEN: melody inside harmonies.** Two quick "top voice" pickers were tried, scoring which pitches sound at once, with and without removing the tracked voice's overtones. At best they fixed 5 notes but broke 6. A real multi-voice transcription model would be needed.
+- Check singer graded against your edits:
+  - On raw prep notes, 43 of its 52 flags were at spots you fixed (83%).
+  - On your finished song 31 flags were left. 8 were the spoken intro, now skipped in the PC tool and the app. The other 23 are harmony spots.
 - More songs you repair become more ground truth. Snapshot them, and every change can be scored against all of them before it ships.
 - First repair by Claude (These Palace Walls after 1:15, 2026-11-24, for you to check):
   - The backing is in C#/D♭ major from about 1:12.

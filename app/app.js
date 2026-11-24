@@ -1,8 +1,8 @@
 // ?v= stamps are rewritten by publish.ps1 so every publish loads fresh files past GitHub's CDN cache
-import { readZip, writeZip } from './zip.js?v=202611241406';
-import * as db from './db.js?v=202611241406';
-import { detectPitch } from './pitch.js?v=202611241406';
-import { framesToNotes, placeOctave, toPhrases, noteRange } from './melody.js?v=202611241406';
+import { readZip, writeZip } from './zip.js?v=202611241408';
+import * as db from './db.js?v=202611241408';
+import { detectPitch } from './pitch.js?v=202611241408';
+import { framesToNotes, placeOctave, toPhrases, noteRange } from './melody.js?v=202611241408';
 
 const $ = s => document.querySelector(s);
 const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
@@ -366,7 +366,7 @@ async function openSong(id, opts = {}) {
   S = {
     song, meta: m, notes: m.notes, phrases: m.phrases, backing, vocals, gB, gV, nodes: [nB, nV, gB, gV],
     // every note on screen, even one moved an octave away (the range field skips the outer 3%)
-    lo: Math.min(m.range[0], ...m.notes.map(n => n.p)) - 3, hi: Math.max(m.range[1], ...m.notes.map(n => n.p)) + 3, rate: 1, trail: [], pops: [], running: false,
+    lo: Math.min(m.range[0], ...m.notes.map(n => n.p)) - 4, hi: Math.max(m.range[1], ...m.notes.map(n => n.p)) + 4, rate: 1, trail: [], pops: [], running: false,
     mode: 'song', queue: [], qi: 0, attempts: [], passes: 0, guideStale,
   };
   S.trace = traceFor(song);
@@ -669,7 +669,7 @@ $('#edLeft').onclick =() => edApply(n => { n.t = +Math.max(0, n.t - 0.05).toFixe
 $('#edRight').onclick = () => edApply(n => { n.t = +(n.t + 0.05).toFixed(3); });
 $('#edMine').onclick = () => {
   if (S?.live == null) { toast('Sing the note (music paused), then tap 🎤 again'); return; }
-  edApply(n => { n.p = Math.round(n.p + foldCents(S.live, n.p) / 100); beep(n.p); });
+  edApply(n => { n.p = Math.round(placePitch(S.live, n.p)); beep(n.p); });
 };
 $('#edShort').onclick = () => edApply(n => { n.d = +Math.max(0.1, n.d - 0.05).toFixed(3); });
 $('#edLong').onclick = () => edApply(n => { n.d = +(n.d + 0.05).toFixed(3); });
@@ -677,7 +677,7 @@ $('#edAdd').onclick = () => {
   if (!S?.edit) return;
   const t = +songTime().toFixed(3), near = S.notes[Math.min(S.notes.length - 1, lowerBound(t))] || S.notes[S.notes.length - 1];
   const base = near?.p ?? Math.round((S.lo + S.hi) / 2);
-  const p = S.live != null ? Math.round(base + foldCents(S.live, base) / 100) : base;
+  const p = S.live != null ? Math.round(placePitch(S.live, base)) : base;
   const n = { t, d: 0.5, p };
   S.notes.push(n); edChanged();
   S.sel = S.notes.indexOf(n); beep(p); edShow();
@@ -758,7 +758,13 @@ function noteIndexAt(ts, advance = true) {
   if (advance) S.ni = i;
   return i < S.notes.length && S.notes[i].t <= ts ? i : -1;
 }
-const foldCents = (m, p) => ((((m - p) % 12) + 18) % 12 - 6) * 100;
+// Where a sung pitch is drawn (and where 🎤 / ＋ put a note): its true pitch whenever it fits in the
+// view, which spans the whole song (user, 2026-11-24: "preferably the whole songs range is in view
+// ... such that the pitch markers are positionally correct for the notes the represent. I don't want
+// to go lower and see my pitch marker jump to the top of the screen"). Only a voice outside the
+// song's range (e.g. a child singing a man's part) is moved by octaves next to the target r.
+const placePitch = (m, r) => (S && m >= S.lo && m <= S.hi) ? m : m - 12 * Math.round((m - r) / 12);
+const foldCents = (m, p) =>((((m - p) % 12) + 18) % 12 - 6) * 100;
 
 function inLoop(i) { return S.mode === 'song' || (S.mode === 'practice' && i >= S.loop.a && i < S.loop.b); }
 
@@ -891,7 +897,7 @@ function draw(t, ts) {
       const m = tr[k];
       if (Number.isNaN(m)) { pen = false; continue; }
       const tt = k * TRACE_DT, ni = Math.min(S.notes.length - 1, lowerBound(tt)), r = S.notes[ni]?.p ?? m;
-      const fm = m - 12 * Math.round((m - r) / 12), px = x(tt), py = y(fm);
+      const fm = placePitch(m, r), px = x(tt), py = y(fm);
       if (pen && Math.abs(fm - last) < 3) g.lineTo(px, py); else g.moveTo(px, py);
       pen = true; last = fm;
     }
@@ -908,9 +914,9 @@ function draw(t, ts) {
   // now line
   g.fillStyle = '#ffffff88'; g.fillRect(nowX - dpr, 0, 2 * dpr, H);
 
-  // voice trail (folded to the nearest octave of the target)
+  // voice trail (true pitch when it fits the view, see placePitch)
   const ref = tt => { const i = S.notes.findIndex((n, k) => k >= S.ni - 2 && n.t + n.d >= tt); const n = S.notes[i >= 0 ? i : S.notes.length - 1]; return n ? n.p : (S.lo + S.hi) / 2; };
-  const fold = (m, r) => m - 12 * Math.round((m - r) / 12);
+  const fold = placePitch;
   g.lineWidth = 3 * dpr; g.strokeStyle = css('--accent'); g.lineCap = 'round';
   g.beginPath(); let pen = false, last = null;
   for (const p of S.trail) {
@@ -1468,7 +1474,7 @@ function releaseWake() { wake?.release().catch(() => {}); wake = null; }
 
 // ---------- boot ----------
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
-  navigator.serviceWorker.register('sw.js?v=202611241406', { updateViaCache: 'none' });
+  navigator.serviceWorker.register('sw.js?v=202611241408', { updateViaCache: 'none' });
   // new version installed -> reload once, but never in the middle of a song
   const hadController = !!navigator.serviceWorker.controller;
   navigator.serviceWorker.addEventListener('controllerchange', () => {

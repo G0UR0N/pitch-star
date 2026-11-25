@@ -1,8 +1,8 @@
 // ?v= stamps are rewritten by publish.ps1 so every publish loads fresh files past GitHub's CDN cache
-import { readZip, writeZip } from './zip.js?v=202611242021';
-import * as db from './db.js?v=202611242021';
-import { detectPitch } from './pitch.js?v=202611242021';
-import { framesToNotes, placeOctave, toPhrases, noteRange } from './melody.js?v=202611242021';
+import { readZip, writeZip } from './zip.js?v=202611251001';
+import * as db from './db.js?v=202611251001';
+import { detectPitch } from './pitch.js?v=202611251001';
+import { framesToNotes, placeOctave, toPhrases, noteRange } from './melody.js?v=202611251001';
 
 const $ = s => document.querySelector(s);
 const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
@@ -1773,6 +1773,13 @@ $('#btnMicTest').onclick = async () => {
 
 // ---------- latency calibration: beeps, singer says "tick" on each; median lag = delay ----------
 const TICK_EXTRA = 200;
+$('#calibExtra').checked = settings.tickExtra !== false; // on by default
+$('#calibExtra').onchange = e => {
+  settings.tickExtra = e.target.checked;
+  // move the current delay with it, so the box takes effect without re-running Auto-set
+  setLatency(Math.min(1000, Math.max(0, settings.latency + (e.target.checked ? TICK_EXTRA : -TICK_EXTRA))));
+  $('#calibOut').textContent = `Delay now ${settings.latency} ms`;
+};
 $('#btnCalib').onclick = async () => {
   const out = $('#calibOut'), btn = $('#btnCalib');
   try { await ensureAudio(); } catch { out.textContent = 'mic blocked'; return; }
@@ -1815,8 +1822,11 @@ $('#btnCalib').onclick = async () => {
   const ms = Math.round((lags[lags.length >> 1] * 1000) / 10) * 10;
   // + 200 ms on top of the tick lag: singing a note lands later than saying "tick" (user, 2026-11-24:
   // "add an extra offset of 200ms to whatever the tick delay says and it seems to track much better")
-  setLatency(Math.min(1000, Math.max(0, ms + TICK_EXTRA)));
-  out.textContent = `Delay set to ${settings.latency} ms ✓ (ticks ${ms} + ${TICK_EXTRA} for singing)`;
+  // the +200 can be switched off (user, 2026-11-25: "make it so that the 200ms offset addition can be
+  // turned on or off (check box near the Auto-set delay button)")
+  const extra = settings.tickExtra === false ? 0 : TICK_EXTRA;
+  setLatency(Math.min(1000, Math.max(0, ms + extra)));
+  out.textContent = `Delay set to ${settings.latency} ms ✓` + (extra ? ` (ticks ${ms} + ${extra} for singing)` : '');
 };
 
 // ---------- wake lock ----------
@@ -1826,7 +1836,7 @@ function releaseWake() { wake?.release().catch(() => {}); wake = null; }
 
 // ---------- boot ----------
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
-  navigator.serviceWorker.register('sw.js?v=202611242021', { updateViaCache: 'none' });
+  navigator.serviceWorker.register('sw.js?v=202611251001', { updateViaCache: 'none' });
   // new version installed -> reload once, but never in the middle of a song
   const hadController = !!navigator.serviceWorker.controller;
   navigator.serviceWorker.addEventListener('controllerchange', () => {

@@ -9,7 +9,7 @@
 <link rel="icon" href="icon.svg">
 <link rel="apple-touch-icon" href="icon-192.png">
 <title>Pitch Star</title>
-<link rel="stylesheet" href="style.css?v=202611241818">
+<link rel="stylesheet" href="style.css?v=202611241826">
 </head>
 <body>
 
@@ -123,12 +123,10 @@
       <select id="setMic" class="micSel"></select>
     </label>
     <label>Mic delay fix: <b id="latOut"></b> ms <small class="hint">(saved per microphone)</small>
-      <input id="setLatency" type="range" min="0" max="600" step="10">
+      <input id="setLatency" type="range" min="0" max="1000" step="10">
     </label>
     <div class="mictest"><button type="button" id="btnCalib" class="btn small">🎧 Auto-set delay</button><span id="calibOut" class="hint"></span></div>
     <p class="hint">Bluetooth headphones add delay. Tap <b>Auto-set delay</b> with your headphones on, then say <b>"tick"</b> right on each beep you hear.</p>
-    <div class="mictest"><button type="button" id="btnScale" class="btn small">🎵 Sung-scale test</button><button type="button" id="btnScaleUse" class="btn small" hidden></button></div>
-    <p class="hint" id="scaleOut">Hear the C scale once, then 4 count-in clicks, then sing it up and back down, one note on each click, the way that sounds on time to you.</p>
     <div class="mictest">Mic test: <b id="micNote">—</b> <button type="button" id="btnMicTest" class="btn small">Start mic</button></div>
     <p class="hint" id="storeInfo"></p>
     <button class="btn primary wide">Done</button>
@@ -179,6 +177,6 @@
 </dialog>
 
 <div id="toast" class="toast" hidden></div>
-<script type="module" src="app.js?v=202611241818"></script>
+<script type="module" src="app.js?v=202611241826"></script>
 </body>
 </html>

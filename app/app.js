@@ -1,8 +1,8 @@
 // ?v= stamps are rewritten by publish.ps1 so every publish loads fresh files past GitHub's CDN cache
-import { readZip, writeZip } from './zip.js?v=202611241818';
-import * as db from './db.js?v=202611241818';
-import { detectPitch } from './pitch.js?v=202611241818';
-import { framesToNotes, placeOctave, toPhrases, noteRange } from './melody.js?v=202611241818';
+import { readZip, writeZip } from './zip.js?v=202611241826';
+import * as db from './db.js?v=202611241826';
+import { detectPitch } from './pitch.js?v=202611241826';
+import { framesToNotes, placeOctave, toPhrases, noteRange } from './melody.js?v=202611241826';
 
 const $ = s => document.querySelector(s);
 const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
@@ -1803,85 +1803,9 @@ $('#btnCalib').onclick = async () => {
   if (lags.length < 4) { out.textContent = `Heard ${lags.length} ticks. Try again, a bit louder.`; return; }
   lags.sort((a, b) => a - b);
   const ms = Math.round((lags[lags.length >> 1] * 1000) / 10) * 10;
-  setLatency(Math.min(600, Math.max(0, ms)));
+  setLatency(Math.min(1000, Math.max(0, ms)));
   out.textContent = `Delay set to ${settings.latency} ms ✓`;
 };
-
-// ---------- sung-scale delay test (user, 2026-11-24: "add another setting that allows me to sing a
-// standard Cscale and see if there is a pattern in delay from what sounds like on time notes to me
-// but maybe there is a lag"). Measures when the pitch detector first hears each scale note held
-// (what scoring sees), against the click it was sung on. Clicks only while singing: a guide tone
-// would leak into the mic. The result is shown; the delay changes only on "Use". ----------
-const SCALE = [60, 62, 64, 65, 67, 69, 71, 72, 71, 69, 67, 65, 64, 62, 60], SCALE_BEAT = 0.75;
-function scaleTone(p, t, d, f) {
-  const o = ctx.createOscillator(), gn = ctx.createGain();
-  o.type = f ? 'square' : 'triangle'; o.frequency.value = f || 440 * 2 ** ((p - 69) / 12);
-  gn.gain.setValueAtTime(0, t); gn.gain.linearRampToValueAtTime(f ? 0.15 : 0.25, t + 0.005);
-  gn.gain.exponentialRampToValueAtTime(0.001, t + d);
-  o.connect(gn).connect(OUT); o.start(t); o.stop(t + d + 0.02);
-}
-function scaleLags(frames, sing) {
-  // onset = first frame nearest to the note's pitch (octaves ignored, within half a semitone: E/F and
-  // B/C are a half step apart) that stays on it for 0.08 s
-  return SCALE.map((p, i) => {
-    const c = sing + i * SCALE_BEAT, on = f => f.m != null && Math.abs(((f.m - p) % 12 + 18) % 12 - 6) < 0.5;
-    const win = frames.filter(f => f.t >= c - 0.35 && f.t < c + SCALE_BEAT * 0.9);
-    for (let k = 0; k < win.length; k++) {
-      if (!on(win[k])) continue;
-      const hold = win.filter(f => f.t >= win[k].t && f.t < win[k].t + 0.08);
-      if (hold.length >= 2 && hold.filter(on).length / hold.length >= 0.7) return win[k].t - c;
-    }
-    return null;
-  });
-}
-const median = a => { const s = [...a].sort((x, y) => x - y); return s.length ? s[s.length >> 1] : null; };
-$('#btnScale').onclick = async () => {
-  const out = $('#scaleOut'), btn = $('#btnScale'), use = $('#btnScaleUse');
-  try { await ensureAudio(); } catch { out.textContent = 'mic blocked'; return; }
-  if (!analyser && !SIM) { out.textContent = 'no mic'; return; }
-  btn.disabled = true; use.hidden = true;
-  const half = SCALE_BEAT / 2, t0 = ctx.currentTime + 0.8;
-  SCALE.forEach((p, i) => scaleTone(p, t0 + i * half, half * 0.9));             // listen once
-  const count = t0 + SCALE.length * half + SCALE_BEAT, sing = count + 4 * SCALE_BEAT;
-  for (let i = 0; i < 4 + SCALE.length; i++) scaleTone(0, count + i * SCALE_BEAT, 0.03, i < 4 ? 1000 : 1500);
-  const simLag = window.__scaleLag ?? 0.18;  // SIM: a pretend singer this late
-  const mic = SIM ? now => { const i = Math.floor((now - sing - simLag) / SCALE_BEAT), x = now - sing - simLag - i * SCALE_BEAT;
-    return i >= 0 && i < SCALE.length && x < SCALE_BEAT * 0.8 ? { midi: SCALE[i] + 12 + (Math.random() - 0.5) * 0.4 } : null; } : () => readMic();
-  const frames = [], end = sing + SCALE.length * SCALE_BEAT + 0.6;
-  await new Promise(done => {
-    const loop = () => {
-      const now = ctx.currentTime;
-      if (now >= sing - 0.4) frames.push({ t: now, m: mic(now)?.midi ?? null });
-      const k = Math.floor((now - sing) / SCALE_BEAT);
-      out.textContent = now < count ? 'Listen…' : now < sing ? `Count-in ${Math.floor((now - count) / SCALE_BEAT) + 1}…`
-        : k < SCALE.length ? `Sing ${noteName(SCALE[k]).replace(/\d/, '')} (${k + 1}/${SCALE.length})` : 'Checking…';
-      if (now < end) requestAnimationFrame(loop); else done();
-    };
-    loop();
-  });
-  btn.disabled = false;
-  const lags = scaleLags(frames, sing), got = lags.filter(l => l != null);
-  if (got.length < 6) { out.textContent = `Heard only ${got.length} of ${SCALE.length} notes on pitch. Try again, a bit louder and longer on each note.`; return; }
-  const ms = x => Math.round(x * 1000), med = median(got), q = [...got].sort((a, b) => a - b);
-  const spread = ms((q[Math.floor(q.length * 0.75)] - q[Math.floor(q.length * 0.25)]) / 2);
-  const up = median(lags.slice(0, 8).filter(l => l != null)), down = median(lags.slice(8).filter(l => l != null));
-  const first = median(lags.slice(0, 7).filter(l => l != null)), last = median(lags.slice(-7).filter(l => l != null));
-  const runs = (settings.scaleRuns ??= []);
-  runs.push({ at: Date.now(), ms: ms(med), mic: settings.micId || '' }); if (runs.length > 6) runs.shift();
-  saveSettings();
-  const mine = runs.filter(r => r.mic === (settings.micId || '')).map(r => r.ms);
-  const sign = v => (v >= 0 ? '+' : '') + v;
-  out.innerHTML = [
-    `<b>Sung delay: ${ms(med)} ms</b> (now set: ${settings.latency} ms) · notes vary ±${spread} ms${spread > 60 ? ' (a lot: try again)' : ''}`,
-    `Going up ${up != null ? ms(up) : '—'} ms, coming down ${down != null ? ms(down) : '—'} ms · start ${first != null ? ms(first) : '—'} ms, end ${last != null ? ms(last) : '—'} ms`,
-    'Each note: ' + lags.map((l, i) => `${noteName(SCALE[i]).replace(/\d/, '')} ${l == null ? '?' : sign(ms(l))}`).join(' · '),
-    mine.length > 1 ? `Runs on this mic: ${mine.join(', ')} ms` : '',
-  ].filter(Boolean).join('<br>');
-  const set = Math.min(600, Math.max(0, Math.round(ms(med) / 10) * 10));
-  use.textContent = `Use ${set} ms`; use.hidden = set === settings.latency;
-  use.onclick = () => { setLatency(set); use.hidden = true; toast(`Delay set to ${set} ms ✓`); };
-};
-if (SIM) setTimeout(() => { window.__scale = { scaleLags, SCALE }; });
 
 // ---------- wake lock ----------
 let wake = null;
@@ -1890,7 +1814,7 @@ function releaseWake() { wake?.release().catch(() => {}); wake = null; }
 
 // ---------- boot ----------
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
-  navigator.serviceWorker.register('sw.js?v=202611241818', { updateViaCache: 'none' });
+  navigator.serviceWorker.register('sw.js?v=202611241826', { updateViaCache: 'none' });
   // new version installed -> reload once, but never in the middle of a song
   const hadController = !!navigator.serviceWorker.controller;
   navigator.serviceWorker.addEventListener('controllerchange', () => {

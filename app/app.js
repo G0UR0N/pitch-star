@@ -1777,7 +1777,9 @@ $('#calibExtra').checked = settings.tickExtra !== false; // on by default
 $('#calibExtra').onchange = e => {
   settings.tickExtra = e.target.checked;
   // move the current delay with it, so the box takes effect without re-running Auto-set
-  setLatency(Math.min(1000, Math.max(0, settings.latency + (e.target.checked ? TICK_EXTRA : -TICK_EXTRA))));
+  // off takes away what it can (the delay can't go below 0); on puts back exactly that, so on/off never drifts
+  if (e.target.checked) setLatency(Math.min(1000, settings.latency + (settings.extraTaken ?? TICK_EXTRA)));
+  else { settings.extraTaken = Math.min(TICK_EXTRA, settings.latency); setLatency(settings.latency - settings.extraTaken); }
   $('#calibOut').textContent = `Delay now ${settings.latency} ms`;
 };
 $('#btnCalib').onclick = async () => {

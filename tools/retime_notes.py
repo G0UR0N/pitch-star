@@ -68,31 +68,86 @@ def agreement(mv, notes):
     return ok / max(1, tot)
 
 
-def retime(notes, mv, onsets):
+def pick_track(tracks, n):
+    """The pitch track that carries this note best (most frames on its pitch): the separated lead
+    voice where it sings the note, all vocals for other singers (2026-11-24: Where Are You Christmas
+    has a choir behind Faith Hill; These Palace Walls has several singers)."""
+    k0, k1 = int(n["t"] * 100), int((n["t"] + n["d"]) * 100)
+    return max(tracks, key=lambda mv: sum(on_pitch(mv, k, n["p"]) for k in range(k0 - 10, k1 + 10)))
+
+
+def voiced(mv, k):
+    return 0 <= k < len(mv) and not np.isnan(mv[k])
+
+
+def retime(notes, tracks, onsets, ends=False):
+    """Starts to the syllable's attack; with ends=True also each end to where the voice stops
+    (user, 2026-11-24: "fix timing and durations as you see fit")."""
+    if not isinstance(tracks, list):
+        tracks = [tracks]
     out, moves = [dict(n) for n in notes], []
     for i, n in enumerate(out):
+        mv = pick_track(tracks, n)
         run = sung_run(mv, n)
         if not run:
             continue
+        start, end = n["t"], n["t"] + n["d"]
+        # --- start: the attack just before the pitch is reached (scoops keep the old start) ---
         reach = run[0]
         att = onsets[(onsets >= reach - ATTACK_BEFORE) & (onsets <= reach + 0.03)]
-        start = float(att[-1]) if len(att) else reach
-        end = n["t"] + n["d"]
+        s = float(att[-1]) if len(att) else reach
         if i:
             prev = out[i - 1]
-            start = max(start, min(n["t"], prev["t"] + prev["d"]))  # never into the previous note
-        mv_by = start - n["t"]
-        if not MIN_MOVE <= abs(mv_by) <= MAX_MOVE or end - start < 0.1:
-            continue
-        # later only if nobody is singing at the old start: a scoop up into the note starts the
-        # syllable on time, only the pitch arrives late (the rhythm is the syllable, not the pitch)
-        if mv_by > 0:
-            gap = mv[int(n["t"] * 100):int(start * 100)]
-            if len(gap) and np.isnan(gap).mean() < 0.7:
-                continue
-        moves.append((n["t"], nn(n["p"]), mv_by))
+            s = max(s, min(n["t"], prev["t"] + prev["d"]))  # never into the previous note
+        by = s - n["t"]
+        ok = MIN_MOVE <= abs(by) <= MAX_MOVE and end - s >= 0.1
+        if ok and by > 0:
+            # later only if, at the old start, nobody is singing yet OR the singer is still holding the
+            # previous note (she hasn't moved on). Any other voice there is a scoop up into this note:
+            # the syllable starts on time, only the pitch arrives late (the rhythm is the syllable).
+            # (2026-11-24: "still on the previous note" added for Where Are You Christmas, whose
+            # targets ran 0.1-0.25 s early in places while the scoop rule held them.)
+            gap = mv[int(n["t"] * 100):int(s * 100)]
+            sung = gap[~np.isnan(gap)] if len(gap) else gap
+            prev_p = out[i - 1]["p"] if i else None
+            held = prev_p is not None and len(sung) and np.mean(abs(((sung - prev_p) + 6) % 12 - 6) < 0.6) >= 0.7
+            ok = not (len(gap) and np.isnan(gap).mean() < 0.7) or bool(held)
+        if ok:
+            moves.append((n["t"], nn(n["p"]), "start", by))
+            start = s
+        # --- end: where the voice stops (any pitch: ornaments belong to the note), never into the next note ---
+        if ends:
+            nxt = out[i + 1]["t"] if i + 1 < len(out) else 1e9
+            k = int(round(end * 100))
+            if voiced(mv, k - 1) and voiced(mv, k):  # still singing at the end: follow the voice
+                j = k
+                while j < k + int(MAX_MOVE * 100) and (voiced(mv, j) or voiced(mv, j + 1) or voiced(mv, j + 2)):
+                    j += 1
+                e = min(j / 100, nxt - 0.02)
+            elif not voiced(mv, k - 1):  # the note runs on into silence: end where the voice stopped
+                j = k - 1
+                while j > int(start * 100) and not voiced(mv, j):
+                    j -= 1
+                e = (j + 1) / 100
+            else:
+                e = end
+            by = e - end
+            if MIN_MOVE <= abs(by) <= MAX_MOVE and e - start >= 0.1:
+                moves.append((n["t"], nn(n["p"]), "end", by))
+                end = e
         n["t"], n["d"] = round(start, 3), round(end - start, 3)
     return out, moves
+
+
+def voiced_share(tracks, notes):
+    """Share of target time where the chosen voice is actually singing."""
+    on = tot = 0
+    for n in notes:
+        mv = pick_track(tracks, n)
+        ks = range(int(n["t"] * 100), int((n["t"] + n["d"]) * 100))
+        tot += len(ks)
+        on += sum(voiced(mv, k) for k in ks)
+    return on / max(1, tot)
 
 
 def main():
@@ -100,14 +155,20 @@ def main():
     pack = next(p for p in prep.SONGS_DIR.glob("*.song") if part.lower() in p.stem.lower())
     meta, audio = read_pack(pack)
     work = prep.WORK / pack.stem
-    mv = V.midi(work, "vocals") - V.tune(work, "vocals")
+    tune = V.tune(work, "vocals")
+    mv = V.midi(work, "vocals") - tune
+    tracks = [mv] + ([V.midi(work, "lead") - tune] if (work / "lead.wav").exists() else [])
     onsets = np.array(V.onsets(work))
-    new, moves = retime(meta["notes"], mv, onsets)
-    say(f"== {pack.stem}: {len(moves)} of {len(new)} notes re-timed")
-    for t, name, d in moves:
-        say(f"   {mmss(t)} {name:4} start {'earlier' if d < 0 else 'later':7} by {abs(d):.2f}s")
+    ends = "--ends" in sys.argv
+    new, moves = retime(meta["notes"], tracks, onsets, ends)
+    say(f"== {pack.stem}: {len({m[0] for m in moves})} of {len(new)} notes changed "
+        f"({sum(m[2] == 'start' for m in moves)} starts, {sum(m[2] == 'end' for m in moves)} ends)")
+    for t, name, what, d in moves:
+        word = ("earlier" if d < 0 else "later") if what == "start" else ("shorter" if d < 0 else "longer")
+        say(f"   {mmss(t)} {name:4} {what:5} {word:7} by {abs(d):.2f}s")
     a0, a1 = agreement(mv, meta["notes"]), agreement(mv, new)
     say(f"time on the sung pitch: before {a0:.1%}, after {a1:.1%}")
+    say(f"target time with the voice singing: before {voiced_share(tracks, meta['notes']):.1%}, after {voiced_share(tracks, new):.1%}")
     for a in range(15, int(meta["duration"]) + 1, 10):
         p0 = [n for n in meta["notes"] if a <= n["t"] < a + 10]
         p1 = [n for n in new if a <= n["t"] < a + 10]

@@ -63,7 +63,12 @@ Tools live in `%USERPROFILE%\PitchScoreGameTools` (Python env, ffmpeg, uv). Not 
     - Scoring still ignores octaves.
     - **OPEN** (user, same day): "if certain song ranges make the window too zoomed out, we will address folding octave options then".
   - 🎤 my pitch sets it to the note you're singing.
-  - ＋ add, then tap or click anywhere on the notes view: a 0.5 s note lands with its left end where you tapped, at that row's pitch (user, 2026-11-24: "when I click add, let me pick where it lands ... with the left portion landing where the mouse clicked"). On the PC a faint preview with its note name follows the mouse. Tap ＋ add again, or press Esc, to cancel. ↶ undo removes it.
+  - ＋ add, then click (or tap) twice on the notes view (user, 2026-11-24: "when I click add, let me pick where it lands", then "the first click places the left edge and the right edge follows my mouse cursor until I click again to place the right edge" / "if I double click quickly then drop the default size where I clicked"):
+    - The first click sets the left end and the pitch (its row).
+    - The right end follows the mouse, with a preview showing the note name and length.
+    - The second click sets the right end. Clicking left of the first click also works.
+    - A quick double-click (within 0.45 s, same spot) drops a 0.5 s note there.
+    - Tap ＋ add again, or press Esc, to cancel. ↶ undo removes a note.
   - 🗑 deletes it.
   - **Several notes at once** (user, 2026-11-24: "let me select multiple pitch markers for mass shifting options"):
     - **☐ select many**: each tap adds or removes a note. In that mode › adds the next note and ‹ drops the last one.
@@ -135,7 +140,22 @@ Tools live in `%USERPROFILE%\PitchScoreGameTools` (Python env, ffmpeg, uv). Not 
   - A start moves later only where nobody is singing at the old start. A scoop up into a note starts the syllable on time, only the pitch arrives late.
   - On These Palace Walls 26 notes moved, almost all earlier. Time on pitch is unchanged (76.5% → 76.4%), because the syllable's attack comes before its pitch, so pitch measures can't confirm a rhythm gain. Your ear judges.
   - Your verdict (user, 2026-11-24: "its good, I did make a few tweaks"). Of the 26 moves you kept about 20, nudged 4 a further 0.05 s earlier and 2 back 0.05 s later. You also turned 0:30.9 into a second C#4 and trimmed a few lengths. Starts may sit slightly earlier still by ear; too little evidence to change the tool yet. The answer key is now this 15:10 version.
-  - Rejected: moving starts later to where the pitch arrives. That gained +2.8% on pitch, but at scoops it would put the marker after the syllable has begun.
+  - Rejected: moving starts later to where the pitch arrives.
+  - **Where Are You Christmas** (user, 2026-11-24: "I like the pitch choices ... if you want to take a pass at timing clean ups go ahead and save off mine and take a stab" / "fix timing and durations as you see fit").
+    - Your 16:13 version is saved in `PitchStar\PrepFiles\saved` and `PitchScoreGameTools\backup`, and is now the second answer-key song. Prep scores 0.60 against it.
+    - Turning melisma folding off scores 0.46 here, against 0.70 on Aladdin, so the folding stays.
+    - The tool now picks, per note, the clearer pitch track: the separated lead voice or all vocals. This song has a choir behind Faith Hill.
+    - With `--ends` it also moves note ends to where the voice stops: trimmed back from silence, or extended while she's still singing, never into the next note.
+    - A start may now also move later when the singer is still holding the previous note at the old start. Only a voice heading into this note counts as a scoop.
+    - Result: 36 of 201 notes changed (21 starts, 17 ends; pitches untouched). Time on pitch went from 68.9% to 69.3%. Check-singer flags stayed at 56; it is weak on her ornaments.
+    - Your verdict (user, 2026-11-24: "Keep yours", then "wait keep mine I meanb"): your 16:13 version is back in `PitchStar\Songs` (plus the check tune) and is the answer key again. Claude's pass is kept only as `PitchScoreGameTools\backup\...claude-timing-pass-2026-11-24.song`.
+    - Correction (user, same day: "sorry I got confused, I need to review yours still... I'll call it up from backup"). The earlier reading that "the ear prefers your timing" was withdrawn; it came from the mix-up.
+    - Verdict (user, 16:33: "yours is good and I tweaked it some more and saved it to google"):
+      - You kept 26 of Claude's 36 changes exactly and fine-tuned the rest.
+      - You re-timed about 16 other notes, often starting the next note earlier and shortening the one before it (e.g. 0:49.8 D4 0.28 s sooner), and deleted 2 notes (2:52.6, 3:07.9).
+      - That 16:33 version is now the answer key. The Drive review copies went to the Recycle Bin; the PC backups (your 16:13 version, Claude's pass) stay in `PitchScoreGameTools\backup`.
+    - Pattern across both songs: the timing pass is a good first draft, and you then move a few starts slightly earlier still.
+    - **OPEN, for your ear:** at 3:44.2 / 3:44.6 the targets are F#4 then D4, but both voice tracks hear D4 then F#4. That gained +2.8% on pitch, but at scoops it would put the marker after the syllable has begun.
 - Lesson (2026-11-24): a run of flags where each target "hears the next note" means those targets sit late. Measure the best time shift per stretch (scratch script `offset2.py`; worth turning into a tool if it recurs).
 - More songs you repair become more ground truth. Snapshot them, and every change can be scored against all of them before it ships.
 - First repair by Claude (These Palace Walls after 1:15, 2026-11-24, for you to check):

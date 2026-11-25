@@ -184,6 +184,7 @@ Tools live in `%USERPROFILE%\PitchScoreGameTools` (Python env, ffmpeg, uv). Not 
 Best on the PC in Chrome/Edge (open the game URL), headphones on.
 1. ⚙️ → pick the **Microphone**, then **Auto-set delay** (say "tick" on each beep). Delay is saved per microphone; the mic picker is also on the play screen.
    - Mic delay slider goes 0–1000 ms (2026-11-24, user: "widen the mic delay allowed to be up to 1000ms"; the user sets it by trial and error). Auto-set still only detects lags under 0.6 s (beeps are 0.8 s apart).
+   - **I sing** (play screen, default "as the song"; 2026-11-24, user: "Add a scale offset option so that I can sing an octave lower and still see the live pitch relative to the target pitch. Default is no offset"): 1 or 2 octaves lower, or 1 higher. It moves the live pitch, the trail and recorded notes by that many octaves (`settings.voiceOct`, in semitones, `voiceAt()` in app.js). Scoring ignores octaves, so scores don't change.
    - A sung C-scale delay test was built and removed the same day (user, 2026-11-24: "Scratch that scale test... im just going to figure it out with some trial and error").
 2. Song list → 🎙️. ◀ ▶ picks **whole song** or one section. **Start**, sing the tune (any octave; vibrato and slides are ignored).
 3. Pink bars = what was heard. **Listen** plays them as tones over the music. **Keep** / **Retry** / **Discard**.

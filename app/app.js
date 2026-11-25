@@ -1,8 +1,8 @@
 // ?v= stamps are rewritten by publish.ps1 so every publish loads fresh files past GitHub's CDN cache
-import { readZip, writeZip } from './zip.js?v=202611241826';
-import * as db from './db.js?v=202611241826';
-import { detectPitch } from './pitch.js?v=202611241826';
-import { framesToNotes, placeOctave, toPhrases, noteRange } from './melody.js?v=202611241826';
+import { readZip, writeZip } from './zip.js?v=202611241831';
+import * as db from './db.js?v=202611241831';
+import { detectPitch } from './pitch.js?v=202611241831';
+import { framesToNotes, placeOctave, toPhrases, noteRange } from './melody.js?v=202611241831';
 
 const $ = s => document.querySelector(s);
 const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
@@ -345,6 +345,15 @@ function readMic() {
   analyser.getFloatTimeDomainData(micBuf);
   return detectPitch(micBuf, ctx.sampleRate);
 }
+// the singer's voice in play: mic pitch moved by the octave offset (user, 2026-11-24: "Add a scale
+// offset option so that I can sing an octave lower and still see the live pitch relative to the
+// target pitch. Default is no offset"). Scoring ignores octaves, so only the picture changes.
+function voiceAt(ts) {
+  const r = SIM ? simVoice(ts) : readMic();
+  return r && settings.voiceOct ? { ...r, midi: r.midi + settings.voiceOct } : r;
+}
+$('#voiceOct').value = String(settings.voiceOct || 0);
+$('#voiceOct').onchange = e => { settings.voiceOct = +e.target.value; saveSettings(); };
 
 // ---------- session ----------
 let S = null;
@@ -968,7 +977,7 @@ function tick() {
     draw(ts, ts); requestAnimationFrame(tick); return;
   }
   if (S.running) {
-    r = SIM ? simVoice(ts) : readMic();
+    r = voiceAt(ts);
     scoreFrame(ts, r?.midi ?? null);
     traceWrite(ts, r?.midi ?? null);
     S.trail.push({ t: ts, m: r?.midi ?? null });
@@ -978,7 +987,7 @@ function tick() {
     // paused: still show the live pitch (helps fixing notes), but never score
     // (user, 2026-11-23: "allow the live pitch marker to show up even if the music is paused" /
     // "only allow scoring to work if music is playing")
-    const v = SIM ? simVoice(ts) : readMic();
+    const v = voiceAt(ts);
     S.live = v?.midi ?? null;
   }
   judge(ts);
@@ -1402,7 +1411,7 @@ function recordTick(t, ts) {
   melody(t);
   if (!S.running) return;
   if (!R.listening && ts >= L.t0 && ts <= L.t1) {
-    const r = SIM ? simVoice(ts) : readMic();
+    const r = voiceAt(ts);
     // sim: an adult singing an octave down and a little flat
     const m = r ? (SIM ? r.midi - 12 - 0.3 : r.midi) : null;
     R.frames.push({ t: ts, m });
@@ -1814,7 +1823,7 @@ function releaseWake() { wake?.release().catch(() => {}); wake = null; }
 
 // ---------- boot ----------
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
-  navigator.serviceWorker.register('sw.js?v=202611241826', { updateViaCache: 'none' });
+  navigator.serviceWorker.register('sw.js?v=202611241831', { updateViaCache: 'none' });
   // new version installed -> reload once, but never in the middle of a song
   const hadController = !!navigator.serviceWorker.controller;
   navigator.serviceWorker.addEventListener('controllerchange', () => {

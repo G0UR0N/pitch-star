@@ -9,7 +9,7 @@
 <link rel="icon" href="icon.svg">
 <link rel="apple-touch-icon" href="icon-192.png">
 <title>Pitch Star</title>
-<link rel="stylesheet" href="style.css?v=202611241826">
+<link rel="stylesheet" href="style.css?v=202611241831">
 </head>
 <body>
 
@@ -88,6 +88,9 @@
     <label class="ctl tog"><input id="lyricsTog" type="checkbox"> Lyrics</label>
     <label class="ctl">Mic <select id="playMic" class="micSel"></select></label>
     <label class="ctl">Delay <b id="playLat"></b>ms</label>
+    <label class="ctl" title="Move your live pitch up or down by octaves, to sing lower or higher than the song">I sing
+      <select id="voiceOct"><option value="0">as the song</option><option value="12">1 octave lower</option><option value="24">2 octaves lower</option><option value="-12">1 octave higher</option></select>
+    </label>
     <label class="ctl">Speed
       <select id="speedSel"><option value="1">100%</option><option value="0.85">85%</option><option value="0.7">70%</option></select>
     </label>
@@ -177,6 +180,6 @@
 </dialog>
 
 <div id="toast" class="toast" hidden></div>
-<script type="module" src="app.js?v=202611241826"></script>
+<script type="module" src="app.js?v=202611241831"></script>
 </body>
 </html>

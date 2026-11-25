@@ -1,8 +1,8 @@
 // ?v= stamps are rewritten by publish.ps1 so every publish loads fresh files past GitHub's CDN cache
-import { readZip, writeZip } from './zip.js?v=202611241831';
-import * as db from './db.js?v=202611241831';
-import { detectPitch } from './pitch.js?v=202611241831';
-import { framesToNotes, placeOctave, toPhrases, noteRange } from './melody.js?v=202611241831';
+import { readZip, writeZip } from './zip.js?v=202611242021';
+import * as db from './db.js?v=202611242021';
+import { detectPitch } from './pitch.js?v=202611242021';
+import { framesToNotes, placeOctave, toPhrases, noteRange } from './melody.js?v=202611242021';
 
 const $ = s => document.querySelector(s);
 const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
@@ -1772,6 +1772,7 @@ $('#btnMicTest').onclick = async () => {
 };
 
 // ---------- latency calibration: beeps, singer says "tick" on each; median lag = delay ----------
+const TICK_EXTRA = 200;
 $('#btnCalib').onclick = async () => {
   const out = $('#calibOut'), btn = $('#btnCalib');
   try { await ensureAudio(); } catch { out.textContent = 'mic blocked'; return; }
@@ -1812,8 +1813,10 @@ $('#btnCalib').onclick = async () => {
   if (lags.length < 4) { out.textContent = `Heard ${lags.length} ticks. Try again, a bit louder.`; return; }
   lags.sort((a, b) => a - b);
   const ms = Math.round((lags[lags.length >> 1] * 1000) / 10) * 10;
-  setLatency(Math.min(1000, Math.max(0, ms)));
-  out.textContent = `Delay set to ${settings.latency} ms ✓`;
+  // + 200 ms on top of the tick lag: singing a note lands later than saying "tick" (user, 2026-11-24:
+  // "add an extra offset of 200ms to whatever the tick delay says and it seems to track much better")
+  setLatency(Math.min(1000, Math.max(0, ms + TICK_EXTRA)));
+  out.textContent = `Delay set to ${settings.latency} ms ✓ (ticks ${ms} + ${TICK_EXTRA} for singing)`;
 };
 
 // ---------- wake lock ----------
@@ -1823,7 +1826,7 @@ function releaseWake() { wake?.release().catch(() => {}); wake = null; }
 
 // ---------- boot ----------
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
-  navigator.serviceWorker.register('sw.js?v=202611241831', { updateViaCache: 'none' });
+  navigator.serviceWorker.register('sw.js?v=202611242021', { updateViaCache: 'none' });
   // new version installed -> reload once, but never in the middle of a song
   const hadController = !!navigator.serviceWorker.controller;
   navigator.serviceWorker.addEventListener('controllerchange', () => {

@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Pitch Star as an installable app for the Fire tablet: the game in a full-screen WebView with no
+     address bar and no way to other websites (user, 2026-11-25: "I dont want her to have access to the
+     browser"). Built by tools\build_apk.py. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.pitchstar.app">
+  <uses-permission android:name="android.permission.RECORD_AUDIO" />
+  <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+  <uses-permission android:name="android.permission.INTERNET" />
+  <application android:label="Pitch Star" android:icon="@mipmap/ic_launcher" android:allowBackup="false"
+      android:hardwareAccelerated="true">
+    <activity android:name=".MainActivity" android:exported="true"
+        android:configChanges="orientation|screenSize|keyboardHidden|smallestScreenSize|screenLayout"
+        android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen">
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN" />
+        <category android:name="android.intent.category.LAUNCHER" />
+      </intent-filter>
+    </activity>
+  </application>
+</manifest>

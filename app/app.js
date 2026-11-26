@@ -1,8 +1,8 @@
 // ?v= stamps are rewritten by publish.ps1 so every publish loads fresh files past GitHub's CDN cache
-import { readZip, writeZip } from './zip.js?v=202611252057';
-import * as db from './db.js?v=202611252057';
-import { detectPitch } from './pitch.js?v=202611252057';
-import { framesToNotes, placeOctave, toPhrases, noteRange } from './melody.js?v=202611252057';
+import { readZip, writeZip } from './zip.js?v=202611252308';
+import * as db from './db.js?v=202611252308';
+import { detectPitch } from './pitch.js?v=202611252308';
+import { framesToNotes, placeOctave, toPhrases, noteRange } from './melody.js?v=202611252308';
 
 const $ = s => document.querySelector(s);
 const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
@@ -1763,7 +1763,8 @@ async function keepStorage() {
 }
 async function showStorage() {
   const ok = await keepStorage();
-  $('#storeInfo').textContent = ok ? '💾 Songs are kept permanently on this device.'
+  $('#storeInfo').textContent = navigator.userAgent.includes('PitchStarApp') ? '💾 Songs are kept in the app. Uninstalling the app erases them.'
+    : ok ? '💾 Songs are kept permanently on this device.'
     : ok === null ? "💾 This browser can't promise to keep the songs: keep the .song files in Drive."
     : '💾 The browser may clear the songs if space runs low. Installing the app (Add to Home Screen) usually lets it keep them.';
 }
@@ -1855,8 +1856,9 @@ async function grabWake() { try { wake ??= await navigator.wakeLock?.request('sc
 function releaseWake() { wake?.release().catch(() => {}); wake = null; }
 
 // ---------- boot ----------
-if ('serviceWorker' in navigator && location.protocol === 'https:') {
-  navigator.serviceWorker.register('sw.js?v=202611252057', { updateViaCache: 'none' });
+// (the Fire tablet app, user agent "PitchStarApp", carries its own files: no service worker there)
+if ('serviceWorker' in navigator && location.protocol === 'https:' && !navigator.userAgent.includes('PitchStarApp')) {
+  navigator.serviceWorker.register('sw.js?v=202611252308', { updateViaCache: 'none' });
   // new version installed -> reload once, but never in the middle of a song
   const hadController = !!navigator.serviceWorker.controller;
   navigator.serviceWorker.addEventListener('controllerchange', () => {

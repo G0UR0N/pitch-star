@@ -2,6 +2,9 @@
 songs/
 *.song
 __pycache__/
+# the Fire tablet app build (log holds local paths)
+*.apk
+tools/build_apk.log
 .claude/
 AI_Template/
 # private rule files (personal info)

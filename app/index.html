@@ -9,7 +9,7 @@
 <link rel="icon" href="icon.svg">
 <link rel="apple-touch-icon" href="icon-192.png">
 <title>Pitch Star</title>
-<link rel="stylesheet" href="style.css?v=202611251001">
+<link rel="stylesheet" href="style.css?v=202611252040">
 </head>
 <body>
 
@@ -49,6 +49,7 @@
     <button id="btnPrevSec" class="btn small">◀</button>
     <div class="pinfo"><b id="pSec"></b><span id="pAttempts"></span></div>
     <button id="btnNextSec" class="btn small">▶</button>
+    <button id="btnLadder" class="btn small" title="Start slow, speed up after each pass">🐢 Slow-mo</button>
   </div>
   <div id="recPanel" class="row" hidden>
     <button id="btnRecKeep" class="btn primary">✓ Keep</button>
@@ -83,6 +84,7 @@
     <button id="btnBack10" class="btn small" title="Back 10 seconds">⏪ 10s</button>
     <button id="btnFwd10" class="btn small" title="Forward 10 seconds">⏩ 10s</button>
     <button id="btnEdit" class="btn small" title="Fix the target notes">✎ Edit notes</button>
+    <button id="btnPracticeHere" class="btn small" title="Practice the section playing now, slow first">🐢 Practice here</button>
     <label class="ctl">Guide voice <input id="guideVol" type="range" min="0" max="1" step="0.05" value="0.3"></label>
     <label class="ctl tog"><input id="melodyTog" type="checkbox"> Hear notes</label>
     <label class="ctl tog"><input id="lyricsTog" type="checkbox"> Lyrics</label>
@@ -92,7 +94,7 @@
       <select id="voiceOct"><option value="0">as the song</option><option value="12">1 octave lower</option><option value="24">2 octaves lower</option><option value="-12">1 octave higher</option></select>
     </label>
     <label class="ctl">Speed
-      <select id="speedSel"><option value="1">100%</option><option value="0.85">85%</option><option value="0.7">70%</option></select>
+      <select id="speedSel"><option value="1">100%</option><option value="0.9">90%</option><option value="0.8">80%</option><option value="0.7">70%</option><option value="0.6">60%</option><option value="0.5">50%</option></select>
     </label>
   </footer>
 </section>
@@ -180,6 +182,6 @@
 </dialog>
 
 <div id="toast" class="toast" hidden></div>
-<script type="module" src="app.js?v=202611251001"></script>
+<script type="module" src="app.js?v=202611252040"></script>
 </body>
 </html>

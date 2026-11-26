@@ -1,8 +1,8 @@
 // ?v= stamps are rewritten by publish.ps1 so every publish loads fresh files past GitHub's CDN cache
-import { readZip, writeZip } from './zip.js?v=202611252040';
-import * as db from './db.js?v=202611252040';
-import { detectPitch } from './pitch.js?v=202611252040';
-import { framesToNotes, placeOctave, toPhrases, noteRange } from './melody.js?v=202611252040';
+import { readZip, writeZip } from './zip.js?v=202611252057';
+import * as db from './db.js?v=202611252057';
+import { detectPitch } from './pitch.js?v=202611252057';
+import { framesToNotes, placeOctave, toPhrases, noteRange } from './melody.js?v=202611252057';
 
 const $ = s => document.querySelector(s);
 const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
@@ -386,14 +386,13 @@ async function openSong(id, opts = {}) {
   $('#edCheckSing').checked = false; $('#edFlagInfo').textContent = '';
   $('#melodyTog').checked = guideStale || !!opts.hearNotes;
   $('#recPanel').hidden = true; $('#syncPanel').hidden = true;
-  $('#btnLadder').hidden = !opts.practice;
   $('#lyricsTog').checked = settings.lyrics;
   buildLyrics();
   resetStats();
   backing.onended = () => { if (S && S.mode === 'song') finishSong(); };
   $('#playTitle').textContent = songName(song);
   $('#guideVol').value = settings.guide;
-  $('#speedSel').value = '1';
+  setRate(opts.rate || 1);
   $('#btnPlay').textContent = '▶ Start';
   $('#liveScore').textContent = '0';
   if (opts.sync) startSync();
@@ -504,11 +503,14 @@ $('#btnQuit').onclick = () => {
   else { closeSession(); show('library'); renderLibrary(); }
 };
 $('#guideVol').oninput = e => { settings.guide = +e.target.value; saveSettings(); if (S && !S.guideStale) S.gV.gain.value = settings.guide; };
+// speed slider (user, 2026-11-25: "make the speed a slider from 0% to 100%"). 0% would stop the song,
+// so the slider bottoms out at 10% (also the lowest browsers play smoothly).
 function setRate(r) {
+  r = Math.min(1, Math.max(0.1, r));
   S.rate = r; S.backing.playbackRate = S.vocals.playbackRate = r; // preservesPitch keeps the notes in tune
-  $('#speedSel').value = String(r);
+  $('#speedSel').value = Math.round(r * 100); $('#speedOut').textContent = Math.round(r * 100);
 }
-$('#speedSel').onchange = e => { if (!S) return; setRate(+e.target.value); if (S.mode === 'practice') updatePracticeUI(); };
+$('#speedSel').oninput = e => { if (!S) return; setRate(+e.target.value / 100); if (S.mode === 'practice') updatePracticeUI(); };
 
 // ---------- skip back / forward 10 s (user, 2026-11-23) ----------
 function skip(dt) {
@@ -1330,46 +1332,26 @@ function loadLoop() {
   const k = S.queue[S.qi], p = S.phrases[k];
   S.loop = { k, a: p.a, b: p.b, t0: p.t0, t1: p.t1, start: Math.max(0, p.t0 - 2.5), end: Math.min(S.meta.duration, p.t1 + 0.7) };
   S.attempts = []; S.passes = 0; S.advancing = false; S.ovMsg = '';
-  if (settings.ladder) setRate(LADDER[0]);
   resetStats(p.a, p.b);
   $('#playSub').textContent = `Practice · section ${k + 1} of ${S.phrases.length}`;
   updatePracticeUI();
   seek(S.loop.start);
 }
-// ---------- slow-mo ladder (user, 2026-11-25: "give time for my daughter to hear certain fast notes so
-// that she can practice hitting them in slow mo, then slightly faster, then faster all the way until
-// normal speed"). On: each section starts at 50%; every pass moves up one step; at 100% the usual
-// two passes finish the section. ----------
-const LADDER = [0.5, 0.6, 0.7, 0.8, 0.9, 1];
-const onLadder = () => settings.ladder && S.rate < 1;
-function showLadder() {
-  $('#btnLadder').textContent = settings.ladder ? '🐢 Slow-mo: on' : '🐢 Slow-mo: off';
-  $('#btnLadder').classList.toggle('primary', !!settings.ladder);
-}
-$('#btnLadder').onclick = () => {
-  if (!S || S.mode !== 'practice') return;
-  settings.ladder = !settings.ladder; saveSettings();
-  setRate(settings.ladder ? LADDER[0] : 1);
-  S.passes = 0; S.ovMsg = ''; resetStats(S.loop.a, S.loop.b);
-  showLadder(); updatePracticeUI();
-  if (S.running) seek(S.loop.start);
-};
-// from the full song: practice the section playing now (or the next one), slow-mo on
+// from the full song: practice the section playing now (or the next one), at the speed set now.
+// (The automatic speed-up ladder was removed, user 2026-11-25: "We'll do away with the concept of
+// speeding up, there is practically no value in that".)
 $('#btnPracticeHere').onclick = () => {
   if (!S || S.mode !== 'song' || S.edit) return;
   const t = songTime(), ph = S.phrases;
   let k = ph.findIndex(p => t < p.t1 + 0.3);
   if (k < 0) k = ph.length - 1;
-  settings.ladder = true; saveSettings();
-  openSong(S.song.id, { practice: { queue: [k], fromResults: false } });
+  openSong(S.song.id, { practice: { queue: [k], fromResults: false }, rate: S.rate });
 };
 function updatePracticeUI() {
   const L = S.loop, need = 2, pct = Math.round(S.rate * 100);
-  showLadder();
   $('#pSec').textContent = `Section ${L.k + 1}${S.queue.length > 1 ? `  (${S.qi + 1}/${S.queue.length})` : ''}${pct < 100 ? ` · ${pct}% speed` : ''}`;
   $('#pAttempts').textContent = (S.attempts.length ? `Tries: ${S.attempts.slice(-5).join(' · ')}   ` : '')
-    + (onLadder() ? `Score ${settings.passTarget}%+ to speed up`
-      : S.attempts.length ? `${'✅'.repeat(Math.min(S.passes, need))}${'⬜'.repeat(Math.max(0, need - S.passes))}`
+    + (S.attempts.length ? `${'✅'.repeat(Math.min(S.passes, need))}${'⬜'.repeat(Math.max(0, need - S.passes))}`
       : `Score ${settings.passTarget}%+ twice to pass`);
   $('#liveScore').textContent = S.attempts.length ? S.attempts[S.attempts.length - 1] : '–';
 }
@@ -1382,14 +1364,6 @@ function practiceTick(t) {
   if (!S.running || t < L.end) return;
   const score = rangeScore(L.a, L.b);
   S.attempts.push(score);
-  if (onLadder()) {  // slow-mo: a pass steps the speed up, a miss stays at this speed
-    const up = score >= settings.passTarget;
-    if (up) setRate(LADDER.find(r => r > S.rate + 0.001) ?? 1);
-    updatePracticeUI(); resetStats(L.a, L.b);
-    ov.hidden = false; ov.textContent = S.ovMsg = up ? `${score}! 👍 Faster: ${Math.round(S.rate * 100)}%` : `${score} – again!`;
-    seek(L.start);
-    return;
-  }
   if (score >= settings.passTarget) S.passes++;
   updatePracticeUI();
   resetStats(L.a, L.b);
@@ -1882,7 +1856,7 @@ function releaseWake() { wake?.release().catch(() => {}); wake = null; }
 
 // ---------- boot ----------
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
-  navigator.serviceWorker.register('sw.js?v=202611252040', { updateViaCache: 'none' });
+  navigator.serviceWorker.register('sw.js?v=202611252057', { updateViaCache: 'none' });
   // new version installed -> reload once, but never in the middle of a song
   const hadController = !!navigator.serviceWorker.controller;
   navigator.serviceWorker.addEventListener('controllerchange', () => {

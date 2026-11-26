@@ -9,7 +9,7 @@
 <link rel="icon" href="icon.svg">
 <link rel="apple-touch-icon" href="icon-192.png">
 <title>Pitch Star</title>
-<link rel="stylesheet" href="style.css?v=202611252040">
+<link rel="stylesheet" href="style.css?v=202611252057">
 </head>
 <body>
 
@@ -48,9 +48,7 @@
   <div id="practicePanel" class="practice" hidden>
     <button id="btnPrevSec" class="btn small">◀</button>
     <div class="pinfo"><b id="pSec"></b><span id="pAttempts"></span></div>
-    <button id="btnNextSec" class="btn small">▶</button>
-    <button id="btnLadder" class="btn small" title="Start slow, speed up after each pass">🐢 Slow-mo</button>
-  </div>
+    <button id="btnNextSec" class="btn small">▶</button>  </div>
   <div id="recPanel" class="row" hidden>
     <button id="btnRecKeep" class="btn primary">✓ Keep</button>
     <button id="btnRecListen" class="btn">▶ Listen</button>
@@ -93,8 +91,8 @@
     <label class="ctl" title="Move your live pitch up or down by octaves, to sing lower or higher than the song">I sing
       <select id="voiceOct"><option value="0">as the song</option><option value="12">1 octave lower</option><option value="24">2 octaves lower</option><option value="-12">1 octave higher</option></select>
     </label>
-    <label class="ctl">Speed
-      <select id="speedSel"><option value="1">100%</option><option value="0.9">90%</option><option value="0.8">80%</option><option value="0.7">70%</option><option value="0.6">60%</option><option value="0.5">50%</option></select>
+    <label class="ctl">Speed <b id="speedOut">100</b>%
+      <input id="speedSel" type="range" min="10" max="100" step="5" value="100">
     </label>
   </footer>
 </section>
@@ -182,6 +180,6 @@
 </dialog>
 
 <div id="toast" class="toast" hidden></div>
-<script type="module" src="app.js?v=202611252040"></script>
+<script type="module" src="app.js?v=202611252057"></script>
 </body>
 </html>

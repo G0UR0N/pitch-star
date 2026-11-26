@@ -39,9 +39,9 @@ Tools live in `%USERPROFILE%\PitchScoreGameTools` (Python env, ffmpeg, uv). Not 
 - **Guide voice** = original singer volume. **Hear notes** = plays the target melody as tones (also a quick way to check the melody extraction is right).
 - After a song: **Practice weak sections** loops each section until it scores the pass target twice.
 - **Slow-mo practice** (2026-11-25, user: "speed up/slow down the song and give time for my daughter to hear certain fast notes so that she can practice hitting them in slow mo, then slightly faster, then faster all the way until normal speed"):
-  - **🐢 Practice here** (play screen, full song) opens practice on the section playing now, with slow-mo on.
-  - **🐢 Slow-mo: on/off** (practice panel, remembered as `settings.ladder`): each section starts at 50%; every try at or above the pass target steps up 60 → 70 → 80 → 90 → 100%; a miss stays at that speed. At 100% the usual two passes finish the section.
-  - **Speed** menu is now 100/90/80/70/60/50% (was 100/85/70) and can be changed anytime; the ladder continues from there. Pitch stays the same (`preservesPitch`).
+  - **Speed slider** 10–100% in steps of 5 (2026-11-25, user: "make the speed a slider from 0% to 100%"; 0% would stop the song, so it bottoms out at 10%). Pitch stays the same (`preservesPitch`). Each song opens at 100%.
+  - **🐢 Practice here** (play screen, full song) opens practice on the section playing now, at the speed set now.
+  - An automatic speed-up ladder (50 → 100% on each pass) was built and removed the same day (user, 2026-11-25: "We'll do away with the concept of speeding up, there is practically no value in that").
   - The last try's result now shows above the countdown (before, the countdown overwrote it at once).
 
 ## Skip and fix notes on the play screen (user, 2026-11-23)
